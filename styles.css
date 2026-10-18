@@ -153,8 +153,13 @@
 .existing-duplicate-lead>div{display:grid;gap:4px;min-width:0}
 .existing-duplicate-lead strong{font-size:11px;overflow-wrap:anywhere}
 .existing-duplicate-lead small{color:var(--muted);font-size:9px;line-height:1.4;overflow-wrap:anywhere}
+.existing-duplicate-lead>.existing-duplicate-actions{display:flex;grid-auto-flow:column;align-items:center;gap:6px;flex:none}
+.duplicate-delete-button{display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:#b34549}
+.duplicate-delete-button:hover{border-color:#e2b6b7;background:#fff1f1;color:#9d252c}
+:root[data-theme="dark"] .duplicate-delete-button{color:#ff9298}
+:root[data-theme="dark"] .duplicate-delete-button:hover{border-color:#75434a;background:#392124;color:#ffb0b4}
 .existing-duplicate-connector{text-align:center;color:var(--green);font-size:16px;font-weight:700}
 .existing-duplicate-empty{padding:15px;border:1px dashed var(--line);border-radius:9px;color:var(--muted);font-size:11px;line-height:1.55}
 .calendar-reminder-help{margin:0;color:var(--muted);font-size:10px;line-height:1.5}
 .reminder-actions{flex-wrap:wrap}
-@media(max-width:560px){.existing-duplicate-panel{padding:13px}.existing-duplicate-pair{grid-template-columns:minmax(0,1fr);gap:5px}.existing-duplicate-connector{transform:rotate(90deg)}.existing-duplicate-lead{align-items:flex-start}.existing-duplicate-lead .small-action{flex:none}.reminder-actions{gap:6px}}
+@media(max-width:560px){.existing-duplicate-panel{padding:13px}.existing-duplicate-pair{grid-template-columns:minmax(0,1fr);gap:5px}.existing-duplicate-connector{transform:rotate(90deg)}.existing-duplicate-lead{align-items:flex-start}.existing-duplicate-lead .small-action{flex:none}.existing-duplicate-actions{gap:4px}.reminder-actions{gap:6px}}

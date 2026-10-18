@@ -742,6 +742,17 @@
     resetLeadDialog();
     leadDialog.showModal();
   }
+  function deleteLeadById(id) {
+    const lead = state.leads.find(function (item) { return item.id === id; });
+    if (!lead || !window.confirm("Excluir " + lead.name + " e desvincular seus lembretes?")) return false;
+    state.leads = state.leads.filter(function (item) { return item.id !== id; });
+    state.reminders = state.reminders.map(function (item) { return item.leadId === id ? Object.assign({}, item, { leadId: "" }) : item; });
+    saveState();
+    renderLeads();
+    renderAgenda();
+    showToast("Lead excluído.");
+    return true;
+  }
 
   function splitTableRow(line) {
     let value = line.trim();
@@ -908,7 +919,7 @@
     list.innerHTML = pairs.length ? pairs.map(function (pair) {
       const leadsMarkup = [pair.first, pair.second].map(function (lead) {
         const location = [lead.category, lead.location].filter(Boolean).join(" · ");
-        return '<div class="existing-duplicate-lead"><div><strong>' + escapeHtml(lead.name || "Comércio sem nome") + '</strong><small>' + escapeHtml(lead.phone || "Sem telefone") + (location ? " · " + escapeHtml(location) : "") + '</small><small>' + escapeHtml(duplicateStatus(lead)) + '</small></div><button class="small-action" type="button" data-open-existing-lead="' + escapeHtml(lead.id) + '">Abrir ficha</button></div>';
+        return '<div class="existing-duplicate-lead"><div><strong>' + escapeHtml(lead.name || "Comércio sem nome") + '</strong><small>' + escapeHtml(lead.phone || "Sem telefone") + (location ? " · " + escapeHtml(location) : "") + '</small><small>' + escapeHtml(duplicateStatus(lead)) + '</small></div><div class="existing-duplicate-actions"><button class="small-action" type="button" data-open-existing-lead="' + escapeHtml(lead.id) + '">Abrir ficha</button><button class="duplicate-delete-button" type="button" data-delete-existing-lead="' + escapeHtml(lead.id) + '" aria-label="Excluir ficha de ' + escapeHtml(lead.name || "comércio sem nome") + '" title="Excluir esta ficha"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4m2.2 0-.6 9.2a1 1 0 0 1-1 .9H5.4a1 1 0 0 1-1-.9L3.8 4m2.7 2.2v5m3-5v5"/></svg></button></div></div>';
       }).join('<div class="existing-duplicate-connector" aria-hidden="true">↔</div>');
       const evidence = pair.reasons.map(function (reason) {
         let values = "";
@@ -1199,6 +1210,8 @@
   $("#existingDuplicateList").addEventListener("click", function (event) {
     const button = event.target.closest("[data-open-existing-lead]");
     if (button) openLead(button.dataset.openExistingLead);
+    const deleteButton = event.target.closest("[data-delete-existing-lead]");
+    if (deleteButton) deleteLeadById(deleteButton.dataset.deleteExistingLead);
   });
   $("#emptyImport").addEventListener("click", function () { $("#importPanel").classList.remove("hidden"); $("#importText").focus(); });
   $("#closeImport").addEventListener("click", function () { $("#importPanel").classList.add("hidden"); });
@@ -1299,15 +1312,7 @@
   });
   $("#deleteLead").addEventListener("click", function () {
     const id = $("#leadId").value;
-    const lead = state.leads.find(function (item) { return item.id === id; });
-    if (!lead || !window.confirm("Excluir " + lead.name + " e desvincular seus lembretes?")) return;
-    state.leads = state.leads.filter(function (item) { return item.id !== id; });
-    state.reminders = state.reminders.map(function (item) { return item.leadId === id ? Object.assign({}, item, { leadId: "" }) : item; });
-    saveState();
-    leadDialog.close();
-    renderLeads();
-    renderAgenda();
-    showToast("Lead excluído.");
+    if (deleteLeadById(id)) leadDialog.close();
   });
 
   $("#newReminder").addEventListener("click", function () { openReminder(""); });
