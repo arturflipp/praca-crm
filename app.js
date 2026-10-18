@@ -3,6 +3,7 @@
   const STORAGE_KEY = "praca-crm-local-v1";
   const LEGACY_MIGRATED_KEY = "praca-crm-legacy-migrated-v1";
   const SIDEBAR_KEY = "praca-crm-sidebar-collapsed-v1";
+  const THEME_KEY = "praca-crm-theme-v1";
   const SYNC_META_PREFIX = "praca-crm-sync-v1:";
   const USER_STATE_PREFIX = "praca-crm-user-v1:";
   const supabaseConfig = window.PRACA_CRM_SUPABASE || {};
@@ -126,6 +127,25 @@
   let pendingSingleField = "";
   const $ = (selector, root) => (root || document).querySelector(selector);
   const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
+  function setTheme(theme, persist) {
+    const dark = theme === "dark";
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    const toggle = $("#themeToggle");
+    const icon = $("#themeIcon");
+    const label = toggle && toggle.querySelector(".theme-toggle-label");
+    const action = dark ? "Ativar tema claro" : "Ativar tema escuro";
+    if (icon) icon.textContent = dark ? "☼" : "☾";
+    if (label) label.textContent = dark ? "Claro" : "Escuro";
+    if (toggle) {
+      toggle.setAttribute("aria-label", action);
+      toggle.title = action;
+    }
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = dark ? "#111012" : "#f7f5f1";
+    if (persist) {
+      try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch (_) {}
+    }
+  }
   const leadDialog = $("#leadDialog");
   const reminderDialog = $("#reminderDialog");
   const authForm = $("#authForm");
@@ -1247,6 +1267,9 @@
     dialog.addEventListener("click", function (event) { if (event.target === dialog) dialog.close(); });
   });
   leadDialog.addEventListener("close", resetLeadDialog);
+  $("#themeToggle").addEventListener("click", function () {
+    setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true);
+  });
   $("#authModeToggle").addEventListener("click", function () { setAuthMode(authMode === "login" ? "signup" : "login"); });
   $("#localMode").addEventListener("click", startLocalOnly);
   authForm.addEventListener("submit", async function (event) {
@@ -1291,6 +1314,9 @@
   window.addEventListener("online", function () { if (syncDirty) flushCloudSync(); else refreshCloudState(); });
   window.addEventListener("focus", refreshCloudState);
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") refreshCloudState(); });
+  let savedTheme = "dark";
+  try { savedTheme = localStorage.getItem(THEME_KEY) || "dark"; } catch (_) {}
+  setTheme(savedTheme, false);
   initializeAuth();
   renderAll();
   try { setSidebarCollapsed(localStorage.getItem(SIDEBAR_KEY) === "true"); } catch (_) { setSidebarCollapsed(false); }

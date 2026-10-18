@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f5f1">
+  <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=15" defer></script>
+  <script src="app.js?v=16" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -44,7 +44,7 @@
     <main class="main-area">
       <header class="topbar">
         <div class="topbar-left"><button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Recolher menu" aria-expanded="true" title="Recolher menu"><span aria-hidden="true">☰</span></button><div class="breadcrumb"><span>Prospecção</span><span class="crumb-slash">/</span><strong id="topTitle">Prompt de pesquisa</strong></div></div>
-        <div class="topbar-right"><span id="syncStatus" class="sync-pill"><span class="status-dot"></span><span>Conectando</span></span><span id="accountEmail" class="account-email"></span><button id="signOut" class="sign-out-button" type="button">Sair</button></div>
+        <div class="topbar-right"><button id="themeToggle" class="theme-toggle" type="button" aria-label="Ativar tema claro" title="Ativar tema claro"><span id="themeIcon" aria-hidden="true">☼</span><span class="theme-toggle-label">Claro</span></button><span id="syncStatus" class="sync-pill"><span class="status-dot"></span><span>Conectando</span></span><span id="accountEmail" class="account-email"></span><button id="signOut" class="sign-out-button" type="button">Sair</button></div>
       </header>
 
       <section class="page-view active" id="view-prompt">
