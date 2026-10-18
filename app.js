@@ -531,6 +531,47 @@
     if (parts.length !== 3 || !parts[0]) return dateValue;
     return new Intl.DateTimeFormat("pt-BR", options || { day: "2-digit", month: "short", year: "numeric" }).format(new Date(parts[0], parts[1] - 1, parts[2]));
   }
+  function calendarDateStamp(date) {
+    return String(date.getFullYear()) + String(date.getMonth() + 1).padStart(2, "0") + String(date.getDate()).padStart(2, "0");
+  }
+  function calendarDateTimeStamp(date) {
+    return calendarDateStamp(date) + "T" + String(date.getHours()).padStart(2, "0") + String(date.getMinutes()).padStart(2, "0") + "00";
+  }
+  function googleCalendarTemplateHref(reminder, lead) {
+    const parts = String(reminder.date || "").split("-").map(Number);
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return "";
+    const params = new URLSearchParams({ action: "TEMPLATE", text: reminder.title || "Lembrete Praça CRM" });
+    const details = [lead ? "Lead: " + lead.name : "", reminder.notes || ""].filter(Boolean).join("\n");
+    if (details) params.set("details", details);
+    if (lead && lead.location) params.set("location", lead.location);
+    params.set("ctz", "America/Sao_Paulo");
+    if (reminder.time) {
+      const timeParts = String(reminder.time).split(":").map(Number);
+      if (timeParts.length < 2 || !Number.isFinite(timeParts[0]) || !Number.isFinite(timeParts[1])) return "";
+      const start = new Date(parts[0], parts[1] - 1, parts[2], timeParts[0], timeParts[1], 0);
+      const end = new Date(start);
+      end.setHours(end.getHours() + 1);
+      params.set("dates", calendarDateTimeStamp(start) + "/" + calendarDateTimeStamp(end));
+    } else {
+      const start = new Date(parts[0], parts[1] - 1, parts[2]);
+      const end = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+      params.set("dates", calendarDateStamp(start) + "/" + calendarDateStamp(end));
+    }
+    return "https://calendar.google.com/calendar/render?" + params.toString();
+  }
+  function openGoogleCalendarReminder(reminder) {
+    const lead = state.leads.find(function (item) { return item.id === reminder.leadId; });
+    const href = googleCalendarTemplateHref(reminder, lead);
+    if (!href) { showToast("Confira a data e o horário do lembrete."); return; }
+    const link = document.createElement("a");
+    link.href = href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.className = "sr-only";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
   function readyPrompt() {
     return readyPromptText(state.promptText);
   }
@@ -639,6 +680,7 @@
     const pending = state.reminders.filter(function (item) { return !item.done; }).length;
     $("#statReminders").textContent = String(pending);
     $("#reminderCountBadge").textContent = String(pending);
+    if (!$("#existingDuplicatePanel").classList.contains("hidden")) renderExistingDuplicateAnalysis();
   }
   function updateLeadActions(lead) {
     const link = $("#leadWhatsApp");
@@ -800,6 +842,16 @@
     if (phone.length < 10 || phone.length > 11 || /^([0-9])\1+$/.test(phone)) phone = "";
     return { name: name, phone: phone, googleUrl: normalizedProfileUrl(lead.googleUrl) };
   }
+  function duplicateMatchReasons(first, second) {
+    return duplicateReasonsFromKeys(duplicateKey(first), duplicateKey(second));
+  }
+  function duplicateReasonsFromKeys(firstKey, secondKey) {
+    const reasons = [];
+    if (firstKey.name && firstKey.name === secondKey.name) reasons.push("Nome igual");
+    if (firstKey.phone && firstKey.phone === secondKey.phone) reasons.push("Telefone igual");
+    if (firstKey.googleUrl && firstKey.googleUrl === secondKey.googleUrl) reasons.push("Ficha do Google igual");
+    return reasons;
+  }
   const importFields = [
     ["name", "Nome"], ["phone", "Telefone"], ["googleUrl", "Ficha do Google"], ["category", "Categoria"],
     ["location", "Região"], ["reviews", "Avaliações"], ["rating", "Nota"], ["competitor", "Concorrente"],
@@ -814,23 +866,9 @@
     return normalize(a) === normalize(b);
   }
   function findDuplicateTargets(incoming, pool, type) {
-    const incomingKey = duplicateKey(incoming);
-    return pool.filter(function (lead) {
-      const key = duplicateKey(lead);
-      return (incomingKey.name && key.name === incomingKey.name) ||
-        (incomingKey.phone && key.phone === incomingKey.phone) ||
-        (incomingKey.googleUrl && key.googleUrl === incomingKey.googleUrl);
-    }).map(function (lead) {
-      const key = duplicateKey(lead);
-      const nameMatch = incomingKey.name && key.name === incomingKey.name;
-      const phoneMatch = incomingKey.phone && key.phone === incomingKey.phone;
-      const googleMatch = incomingKey.googleUrl && key.googleUrl === incomingKey.googleUrl;
-      const reasons = [];
-      if (nameMatch) reasons.push("Nome igual");
-      if (phoneMatch) reasons.push("Telefone igual");
-      if (googleMatch) reasons.push("Ficha do Google igual");
-      return { type: type, id: lead.id, lead: lead, reasons: reasons };
-    });
+    return pool.map(function (lead) {
+      return { type: type, id: lead.id, lead: lead, reasons: duplicateMatchReasons(incoming, lead) };
+    }).filter(function (target) { return target.reasons.length > 0; });
   }
   function duplicateStatus(lead) {
     const status = STATUSES.includes(lead.status) ? lead.status : "Novo";
@@ -846,6 +884,47 @@
       if (!meaningfulImportValue(after)) return false;
       return !meaningfulImportValue(before) || !importFieldEqual(key, before, after);
     });
+  }
+  function existingDuplicatePairs() {
+    const pairs = [];
+    const leads = state.leads.map(function (lead) { return { lead: lead, key: duplicateKey(lead) }; });
+    for (let i = 0; i < leads.length; i += 1) {
+      for (let j = i + 1; j < leads.length; j += 1) {
+        const first = leads[i];
+        const second = leads[j];
+        const reasons = duplicateReasonsFromKeys(first.key, second.key);
+        if (reasons.length) pairs.push({ first: first.lead, second: second.lead, reasons: reasons });
+      }
+    }
+    return pairs;
+  }
+  function renderExistingDuplicateAnalysis() {
+    const pairs = existingDuplicatePairs();
+    const summary = $("#existingDuplicateSummary");
+    const list = $("#existingDuplicateList");
+    summary.textContent = pairs.length
+      ? pairs.length + " par(es) encontrado(s) entre " + state.leads.length + " leads. O critério é o mesmo da importação; nota e quantidade de avaliações não contam como identidade."
+      : "Nenhum duplicado encontrado entre " + state.leads.length + " leads com os critérios atuais: nome, telefone válido ou ficha real do Google.";
+    list.innerHTML = pairs.length ? pairs.map(function (pair) {
+      const leadsMarkup = [pair.first, pair.second].map(function (lead) {
+        const location = [lead.category, lead.location].filter(Boolean).join(" · ");
+        return '<div class="existing-duplicate-lead"><div><strong>' + escapeHtml(lead.name || "Comércio sem nome") + '</strong><small>' + escapeHtml(lead.phone || "Sem telefone") + (location ? " · " + escapeHtml(location) : "") + '</small><small>' + escapeHtml(duplicateStatus(lead)) + '</small></div><button class="small-action" type="button" data-open-existing-lead="' + escapeHtml(lead.id) + '">Abrir ficha</button></div>';
+      }).join('<div class="existing-duplicate-connector" aria-hidden="true">↔</div>');
+      const evidence = pair.reasons.map(function (reason) {
+        let values = "";
+        if (reason === "Nome igual") values = pair.first.name;
+        if (reason === "Telefone igual") values = pair.first.phone + " · " + pair.second.phone;
+        if (reason === "Ficha do Google igual") values = "mesmo estabelecimento do Google Maps";
+        return '<span class="duplicate-field"><strong>' + escapeHtml(reason) + ':</strong> ' + escapeHtml(values) + '</span>';
+      }).join("");
+      return '<article class="duplicate-card existing-duplicate-card"><div class="duplicate-card-heading"><div><strong>Possível duplicado</strong><small>Confira as fichas antes de alterar ou excluir qualquer registro.</small></div><span class="duplicate-match-badge">' + pair.reasons.length + ' dado(s) em comum</span></div><div class="existing-duplicate-pair">' + leadsMarkup + '</div><div class="duplicate-data"><div class="duplicate-equal"><strong>Critérios que coincidiram:</strong>' + evidence + '</div></div></article>';
+    }).join("") : '<div class="existing-duplicate-empty">Nenhuma ficha correspondeu. Leads sem nome, telefone válido ou identidade reconhecível da ficha do Google não são marcados como duplicados.</div>';
+  }
+  function showExistingDuplicateAnalysis() {
+    const panel = $("#existingDuplicatePanel");
+    panel.classList.remove("hidden");
+    renderExistingDuplicateAnalysis();
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function renderDuplicateReview() {
     if (!pendingImport) return;
@@ -978,6 +1057,9 @@
     $("#reminderNotes").value = reminder ? reminder.notes || "" : "";
     $("#reminderLead").value = reminder ? reminder.leadId || "" : defaultLeadId || "";
     $("#deleteReminder").classList.toggle("hidden", !reminder);
+    $("#calendarReminderHelp").textContent = reminder
+      ? "Ao editar, o lembrete do CRM é atualizado. Para criar um evento no Google Calendar com esses dados, use o botão Calendar na agenda."
+      : "Ao salvar um novo lembrete, o Google Calendar abrirá o evento preenchido. Revise e confirme em Salvar.";
     reminderDialog.showModal();
   }
   function renderAgenda() {
@@ -997,7 +1079,7 @@
         '<div><div class="reminder-title">' + escapeHtml(item.title) + (overdue ? ' <span class="overdue-label">Atrasado</span>' : "") + '</div>' +
         '<div class="reminder-meta">' + escapeHtml(formatDate(item.date)) + (item.time ? " · " + escapeHtml(item.time) : "") + (lead ? " · " + escapeHtml(lead.name) : " · Sem lead") + '</div>' +
         (item.notes ? '<div class="reminder-notes">' + escapeHtml(item.notes) + '</div>' : "") + '</div>' +
-        '<div class="reminder-actions"><button class="small-action complete" data-action="toggle">' + (item.done ? "Reabrir" : "Concluir") + '</button><button class="small-action" data-action="edit">Editar</button></div></article>';
+        '<div class="reminder-actions"><button class="small-action complete" data-action="toggle">' + (item.done ? "Reabrir" : "Concluir") + '</button><button class="small-action" data-action="edit">Editar</button><button class="small-action calendar-action" data-action="calendar" title="Abrir um evento preenchido no Google Calendar">Calendar ↗</button></div></article>';
     }).join("");
     $("#emptyAgenda").classList.toggle("hidden", items.length > 0);
     if (!items.length) {
@@ -1009,6 +1091,10 @@
     $$(".agenda-filter").forEach(function (button) { button.classList.toggle("active", button.dataset.agenda === agendaFilter); });
     $("#reminderList").querySelectorAll(".reminder-card").forEach(function (card) {
       card.querySelector('[data-action="edit"]').addEventListener("click", function () { openReminder(card.dataset.reminderId); });
+      card.querySelector('[data-action="calendar"]').addEventListener("click", function () {
+        const reminder = state.reminders.find(function (item) { return item.id === card.dataset.reminderId; });
+        if (reminder) openGoogleCalendarReminder(reminder);
+      });
       card.querySelector('[data-action="toggle"]').addEventListener("click", function () {
         const reminder = state.reminders.find(function (item) { return item.id === card.dataset.reminderId; });
         if (reminder) {
@@ -1107,6 +1193,12 @@
   $("#toggleImport").addEventListener("click", function () {
     $("#importPanel").classList.toggle("hidden");
     if (!$("#importPanel").classList.contains("hidden")) $("#importText").focus();
+  });
+  $("#analyzeDuplicates").addEventListener("click", showExistingDuplicateAnalysis);
+  $("#closeExistingDuplicatePanel").addEventListener("click", function () { $("#existingDuplicatePanel").classList.add("hidden"); });
+  $("#existingDuplicateList").addEventListener("click", function (event) {
+    const button = event.target.closest("[data-open-existing-lead]");
+    if (button) openLead(button.dataset.openExistingLead);
   });
   $("#emptyImport").addEventListener("click", function () { $("#importPanel").classList.remove("hidden"); $("#importText").focus(); });
   $("#closeImport").addEventListener("click", function () { $("#importPanel").classList.add("hidden"); });
@@ -1240,10 +1332,11 @@
     if (old) state.reminders = state.reminders.map(function (item) { return item.id === id ? reminder : item; });
     else state.reminders.push(reminder);
     saveState();
+    if (!old) openGoogleCalendarReminder(reminder);
     reminderDialog.close();
     renderAgenda();
     renderLeads();
-    showToast(old ? "Lembrete atualizado." : "Lembrete salvo.");
+    showToast(old ? "Lembrete atualizado." : "Lembrete salvo. Confirme a inclusão no Google Calendar.");
   });
   $("#deleteReminder").addEventListener("click", function () {
     const id = $("#reminderId").value;

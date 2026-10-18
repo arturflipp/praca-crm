@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=16" defer></script>
+  <script src="app.js?v=17" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -96,7 +96,7 @@
       <section class="page-view" id="view-crm">
         <div class="page-heading crm-heading">
           <div><div class="eyebrow">ETAPA 02 · ORGANIZAÇÃO</div><h1>Seus leads</h1><p>Organize cada oportunidade, registre como conheceu o comércio e acompanhe os próximos passos.</p></div>
-          <div class="heading-actions"><button class="button button-secondary" id="toggleImport"><span>⇧</span> Colar tabela</button><button class="button button-primary" id="newLead"><span>＋</span> Adicionar lead</button></div>
+          <div class="heading-actions"><button class="button button-secondary" id="analyzeDuplicates"><span>⌕</span> Analisar duplicados</button><button class="button button-secondary" id="toggleImport"><span>⇧</span> Colar tabela</button><button class="button button-primary" id="newLead"><span>＋</span> Adicionar lead</button></div>
         </div>
         <div class="stats-row">
           <article class="stat-card"><span>Total de leads</span><strong id="statTotal">0</strong><small>na sua lista</small></article>
@@ -115,6 +115,10 @@
             <div class="duplicate-actions"><button class="button button-secondary" id="cancelImportReview" type="button">Ignorar duplicados</button><button class="button button-primary" id="applyImport" type="button">Salvar atualizações</button></div>
           </section>
           <div class="import-footer"><div id="importStatus" class="helper" aria-live="polite">Ao analisar, leads novos serão adicionados; só duplicados ficarão para revisão.</div><button class="button button-primary" id="importLeads">Analisar e adicionar</button></div>
+        </section>
+        <section class="panel existing-duplicate-panel hidden" id="existingDuplicatePanel" aria-live="polite">
+          <div class="duplicate-scan-heading"><div><h2>Duplicados na sua lista</h2><p id="existingDuplicateSummary"></p></div><button class="icon-button" id="closeExistingDuplicatePanel" type="button" aria-label="Fechar análise">×</button></div>
+          <div id="existingDuplicateList" class="existing-duplicate-list"></div>
         </section>
         <section class="panel leads-panel">
           <div class="lead-toolbar">
@@ -182,6 +186,7 @@
         <label>O que lembrar<input id="reminderTitle" required placeholder="Ex.: Visitar o comércio"></label>
         <div class="form-grid two-col"><label>Data<input id="reminderDate" type="date" required></label><label>Horário<input id="reminderTime" type="time"></label></div>
         <label>Detalhes<textarea id="reminderNotes" rows="3" placeholder="Ex.: levar a placa de demonstração; falar com a gerente."></textarea></label>
+        <p class="calendar-reminder-help" id="calendarReminderHelp">Ao salvar um novo lembrete, o Google Calendar abrirá o evento preenchido. Revise e confirme em Salvar.</p>
       </div></div>
       <div class="modal-footer"><button class="button button-danger hidden" type="button" id="deleteReminder">Excluir</button><span class="footer-spacer"></span><button class="button button-secondary" type="button" data-close="reminderDialog">Cancelar</button><button class="button button-primary" type="submit">Salvar lembrete</button></div>
     </form>
