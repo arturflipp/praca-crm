@@ -749,7 +749,27 @@
     try {
       const url = new URL(String(value).trim());
       if (!["http:", "https:"].includes(url.protocol)) return "";
-      return url.hostname.toLowerCase().replace(/^www\./, "") + url.pathname.replace(/\/+$/, "").toLowerCase();
+      const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+      const pathname = url.pathname.replace(/\/+$/, "").toLowerCase();
+      const isGoogleMaps = hostname === "maps.app.goo.gl" || (/(^|\.)google\./i.test(hostname) && /\/maps(?:\/|$)/i.test(url.pathname));
+      if (!isGoogleMaps) return "";
+
+      const queryPlaceId = url.searchParams.get("query_place_id") || url.searchParams.get("place_id") || "";
+      const queryText = Array.from(url.searchParams.values()).join(" ");
+      const queryPlaceIdMatch = queryText.match(/(?:^|[?&\s])place_id\s*[:=]\s*([A-Za-z0-9_-]+)/i);
+      const pathPlaceIdMatch = url.pathname.match(/!1s([^!/?&]+)/i);
+      const placeId = queryPlaceId || (queryPlaceIdMatch && queryPlaceIdMatch[1]) || (pathPlaceIdMatch && pathPlaceIdMatch[1]);
+      if (placeId) return "google-place-id:" + placeId.trim();
+
+      const cid = url.searchParams.get("cid");
+      if (cid) return "google-cid:" + cid.trim();
+
+      if (hostname === "maps.app.goo.gl") return pathname ? hostname + pathname : "";
+
+      const placePathMatch = url.pathname.match(/\/maps\/place\/([^/]+)/i);
+      if (!placePathMatch || !placePathMatch[1]) return "";
+      const placeSlug = normalize(decodeURIComponent(placePathMatch[1]));
+      return placeSlug ? hostname + "/maps/place/" + placeSlug : "";
     } catch (_) { return ""; }
   }
   function duplicateKey(lead) {
