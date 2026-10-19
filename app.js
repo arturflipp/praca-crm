@@ -10,7 +10,13 @@
   const supabaseConfig = window.PRACA_CRM_SUPABASE || {};
   let supabase = null;
   let supabaseReadyPromise = null;
-  const STATUSES = ["Novo", "Mandei", "Respondeu", "Proposta", "Fechou", "Sem resposta", "Recusa"];
+  const STATUSES = ["Novo", "Mandei", "Respondeu", "Proposta", "Vendido", "Sem resposta", "Recusa"];
+  const SOLD_STATUS = "Vendido";
+  const LEGACY_SOLD_STATUS = "Fechou";
+  const OPEN_STATUSES = ["Novo", "Mandei", "Respondeu", "Proposta"];
+  const CONTACTED_STATUSES = ["Mandei", "Respondeu", "Proposta", SOLD_STATUS, "Sem resposta", "Recusa"];
+  const RESPONDED_STATUSES = ["Respondeu", "Proposta", SOLD_STATUS];
+  const SCHEMA_VERSION = 2;
   const LEAD_SORTS = [
     ["recentes", "Mais recentes"],
     ["antigos", "Mais antigos"],
@@ -75,7 +81,65 @@
   }
 
   function newState() {
-    return { promptCategory: "", promptLocation: "", promptText: defaultPrompt, promptBlocks: promptBlocksFromText(defaultPrompt), promptHistory: [], leads: [], reminders: [], _promptUpdatedAt: "" };
+    return { promptCategory: "", promptLocation: "", promptText: defaultPrompt, promptBlocks: promptBlocksFromText(defaultPrompt), promptHistory: [], leads: [], reminders: [], sales: [], _promptUpdatedAt: "", _schemaVersion: SCHEMA_VERSION };
+  }
+  function localDateKey(value) {
+    const date = value instanceof Date ? value : value ? new Date(value) : new Date();
+    if (!date || isNaN(date.getTime())) return "";
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+  }
+  function migrateLead(lead) {
+    if (!lead || typeof lead !== "object") return lead;
+    if (lead.status === LEGACY_SOLD_STATUS) lead.status = SOLD_STATUS;
+    const history = Array.isArray(lead.statusHistory) ? lead.statusHistory : [];
+    if (!history.length) {
+      const status = STATUSES.includes(lead.status) ? lead.status : "Novo";
+      lead.statusHistory = [{ at: lead.createdAt || lead.updatedAt || new Date().toISOString(), from: "", to: status }];
+    } else {
+      lead.statusHistory = history.map(function (entry) {
+        const source = entry && typeof entry === "object" ? entry : {};
+        const to = source.to === LEGACY_SOLD_STATUS ? SOLD_STATUS : source.to || "";
+        const from = source.from === LEGACY_SOLD_STATUS ? SOLD_STATUS : source.from || "";
+        return { at: source.at || "", from: from, to: to };
+      });
+    }
+    return lead;
+  }
+  function buildSale(lead, extra) {
+    const now = new Date().toISOString();
+    const sale = {
+      id: uid(),
+      leadId: lead && lead.id ? lead.id : "",
+      leadName: (lead && lead.name) || "Comércio sem nome",
+      category: (lead && lead.category) || "",
+      location: (lead && lead.location) || "",
+      source: (lead && lead.source) || "",
+      valueCents: null,
+      soldAt: localDateKey(),
+      valuePending: true,
+      notes: "",
+      createdAt: now,
+      updatedAt: now
+    };
+    return Object.assign(sale, extra || {});
+  }
+  function migrateState(data) {
+    if (!data || typeof data !== "object") return data;
+    const version = Number(data._schemaVersion) || 1;
+    data.leads = Array.isArray(data.leads) ? data.leads.map(migrateLead) : [];
+    data.sales = Array.isArray(data.sales) ? data.sales : [];
+    if (version < SCHEMA_VERSION) {
+      const known = {};
+      data.sales.forEach(function (sale) { if (sale && sale.leadId) known[sale.leadId] = true; });
+      data.leads.forEach(function (lead) {
+        if (lead && lead.status === SOLD_STATUS && !known[lead.id]) {
+          data.sales.push(buildSale(lead, { soldAt: localDateKey(lead.createdAt || lead.updatedAt), valuePending: true }));
+          known[lead.id] = true;
+        }
+      });
+    }
+    data._schemaVersion = SCHEMA_VERSION;
+    return data;
   }
   function loadState(storageKey) {
     try {
@@ -94,7 +158,7 @@
           .replace(/(- Telefone\/WhatsApp[^\n]*\n)/, '$1- Link direto da ficha pública desse comércio no Google Maps (use a URL da ficha do estabelecimento; não use uma busca genérica nem invente o link; se não encontrar, escreva "não encontrado")\n')
           .replace("| Comércio | Telefone | Avaliações |", "| Comércio | Telefone | Link do Google | Avaliações |");
       }
-    return data ? (function () {
+    return migrateState(data ? (function () {
       const promptCategory = data.promptCategory || "";
       const promptLocation = data.promptLocation || "";
       const promptText = promptTemplate(data.promptText || defaultPrompt, promptCategory, promptLocation);
@@ -112,9 +176,11 @@
         promptHistory: Array.isArray(data.promptHistory) ? data.promptHistory.slice(0, 10) : [],
         leads: Array.isArray(data.leads) ? data.leads : [],
         reminders: Array.isArray(data.reminders) ? data.reminders : [],
-        _promptUpdatedAt: typeof data._promptUpdatedAt === "string" ? data._promptUpdatedAt : ""
+        sales: Array.isArray(data.sales) ? data.sales : [],
+        _promptUpdatedAt: typeof data._promptUpdatedAt === "string" ? data._promptUpdatedAt : "",
+        _schemaVersion: Number(data._schemaVersion) || 1
       };
-    })() : newState();
+    })() : newState());
     } catch (_) { return newState(); }
   }
 
@@ -238,8 +304,10 @@
     result.promptHistory = Array.isArray(source.promptHistory) ? source.promptHistory.slice(0, 10) : [];
     result.leads = Array.isArray(source.leads) ? source.leads : [];
     result.reminders = Array.isArray(source.reminders) ? source.reminders : [];
+    result.sales = Array.isArray(source.sales) ? source.sales : [];
     result._promptUpdatedAt = typeof source._promptUpdatedAt === "string" ? source._promptUpdatedAt : "";
-    return result;
+    result._schemaVersion = Number(source._schemaVersion) || 1;
+    return migrateState(result);
   }
   function stampChangedRecords() {
     const now = new Date().toISOString();
@@ -254,6 +322,7 @@
     }
     stamp(state.leads, lastStateSnapshot.leads);
     stamp(state.reminders, lastStateSnapshot.reminders);
+    stamp(state.sales, lastStateSnapshot.sales);
     const promptFields = ["promptCategory", "promptLocation", "promptText", "promptBlocks", "promptHistory"];
     if (promptFields.some(function (key) { return JSON.stringify(state[key]) !== JSON.stringify(lastStateSnapshot[key]); })) state._promptUpdatedAt = now;
   }
@@ -282,7 +351,8 @@
       promptHistory: Array.from(history.values()).sort(function (a,b) { return (Date.parse(b.usedAt || "") || 0) - (Date.parse(a.usedAt || "") || 0); }).slice(0, 10),
       _promptUpdatedAt: promptSource._promptUpdatedAt,
       leads: mergeRecords(localState.leads, remoteState.leads),
-      reminders: mergeRecords(localState.reminders, remoteState.reminders)
+      reminders: mergeRecords(localState.reminders, remoteState.reminders),
+      sales: mergeRecords(localState.sales, remoteState.sales)
     });
     return cloudState(merged);
   }
@@ -574,6 +644,85 @@
       }
     });
   }
+  function currencyToCents(value) {
+    let text = String(value == null ? "" : value).replace(/[^\d.,-]/g, "").trim();
+    if (!text) return null;
+    const negative = text.charAt(0) === "-";
+    text = text.replace(/-/g, "");
+    if (text.indexOf(",") >= 0) text = text.replace(/\./g, "").replace(",", ".");
+    else text = text.replace(/\./g, "");
+    const parsed = parseFloat(text);
+    if (!Number.isFinite(parsed)) return null;
+    const cents = Math.round(parsed * 100);
+    return negative ? -cents : cents;
+  }
+  function formatCurrency(cents) {
+    if (typeof cents !== "number" || !Number.isFinite(cents)) return "—";
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+  }
+  function formatCurrencyInput(cents) {
+    if (typeof cents !== "number" || !Number.isFinite(cents)) return "";
+    return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
+  }
+  function saleForLead(leadId) {
+    return state.sales.find(function (sale) { return sale.leadId === leadId; }) || null;
+  }
+  function upsertSaleForLead(lead, fields) {
+    let sale = saleForLead(lead.id);
+    if (!sale) { sale = buildSale(lead, {}); state.sales.push(sale); }
+    sale.leadId = lead.id;
+    sale.leadName = lead.name || sale.leadName || "Comércio sem nome";
+    sale.category = lead.category || "";
+    sale.location = lead.location || "";
+    sale.source = lead.source || "";
+    if (Object.prototype.hasOwnProperty.call(fields, "valueCents")) sale.valueCents = fields.valueCents;
+    if (Object.prototype.hasOwnProperty.call(fields, "soldAt")) sale.soldAt = fields.soldAt || localDateValue();
+    if (Object.prototype.hasOwnProperty.call(fields, "notes")) sale.notes = fields.notes || "";
+    sale.valuePending = !(typeof sale.valueCents === "number" && sale.valueCents > 0);
+    sale.updatedAt = new Date().toISOString();
+    return sale;
+  }
+  function removeSaleForLead(leadId) {
+    state.sales = state.sales.filter(function (sale) { return sale.leadId !== leadId; });
+  }
+  function updateSaleSnapshot(lead) {
+    const sale = saleForLead(lead.id);
+    if (!sale) return;
+    sale.leadName = lead.name || sale.leadName;
+    sale.category = lead.category || "";
+    sale.location = lead.location || "";
+    sale.source = lead.source || "";
+    sale.updatedAt = new Date().toISOString();
+  }
+  function recordStatusChange(lead, from, to) {
+    if (!lead || from === to) return;
+    lead.statusHistory = Array.isArray(lead.statusHistory) ? lead.statusHistory : [];
+    lead.statusHistory.push({ at: new Date().toISOString(), from: from || "", to: to });
+  }
+  function finalizeLeadStatus(lead, isNew, next, saleFields) {
+    const previous = isNew ? "" : (STATUSES.includes(lead.status) ? lead.status : "Novo");
+    next = STATUSES.includes(next) ? next : "Novo";
+    if (next === SOLD_STATUS) {
+      const cents = currencyToCents(saleFields.value);
+      if (cents === null || cents <= 0) return { error: "Informe o valor da venda para marcar como Vendido." };
+      upsertSaleForLead(lead, { valueCents: cents, soldAt: saleFields.date || localDateValue(), notes: saleFields.notes || "" });
+    } else if (!isNew && previous === SOLD_STATUS) {
+      const keep = window.confirm("Manter a venda de " + (lead.name || "este lead") + " no histórico de relatórios?\n\nOK = manter no histórico · Cancelar = excluir a venda.");
+      if (keep) updateSaleSnapshot(lead);
+      else removeSaleForLead(lead.id);
+    }
+    if (isNew) {
+      lead.statusHistory = [{ at: lead.createdAt || new Date().toISOString(), from: "", to: next }];
+    } else {
+      recordStatusChange(lead, previous, next);
+    }
+    lead.status = next;
+    return { ok: true };
+  }
+  function leadPayloadHasData(lead) {
+    const fields = [lead.name, lead.phone, lead.category, lead.location, lead.googleUrl, lead.reviews, lead.rating, lead.competitor, lead.competitorReviews, lead.message, lead.notes];
+    return fields.some(function (value) { return value && String(value).trim(); });
+  }
   function showToast(message) {
     const toast = $("#toast");
     toast.textContent = message;
@@ -679,9 +828,10 @@
   function setView(view) {
     $$(".page-view").forEach(function (section) { section.classList.toggle("active", section.id === "view-" + view); });
     $$(".nav-item").forEach(function (button) { button.classList.toggle("active", button.dataset.view === view); });
-    $("#topTitle").textContent = { prompt: "Prompt de pesquisa", crm: "Leads", agenda: "Lembretes" }[view] || "Prospecção";
+    $("#topTitle").textContent = { prompt: "Prompt de pesquisa", crm: "Leads", agenda: "Lembretes", reports: "Relatórios" }[view] || "Prospecção";
     if (view === "crm") renderLeads();
     if (view === "agenda") renderAgenda();
+    if (view === "reports") renderReports();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function setSidebarCollapsed(collapsed) {
@@ -762,7 +912,10 @@
     $("#leadCountBadge").textContent = String(state.leads.length);
     $("#statTotal").textContent = String(state.leads.length);
     $("#statActive").textContent = String(state.leads.filter(function (lead) { return ["Mandei", "Respondeu", "Proposta"].includes(lead.status); }).length);
-    $("#statWon").textContent = String(state.leads.filter(function (lead) { return lead.status === "Fechou"; }).length);
+    $("#statWon").textContent = String(state.leads.filter(function (lead) { return lead.status === SOLD_STATUS; }).length);
+    const soldValue = state.sales.reduce(function (total, sale) { return typeof sale.valueCents === "number" && sale.valueCents > 0 ? total + sale.valueCents : total; }, 0);
+    const wonHint = $("#statWonHint");
+    if (wonHint) wonHint.textContent = soldValue > 0 ? formatCurrency(soldValue) + " vendidos" : "sem valor informado";
     const pending = state.reminders.filter(function (item) { return !item.done; }).length;
     $("#statReminders").textContent = String(pending);
     $("#reminderCountBadge").textContent = String(pending);
@@ -803,12 +956,31 @@
     $("#leadStatus").value = STATUSES.includes(lead.status) ? lead.status : "Novo";
     $("#leadMessage").value = lead.message || "";
     $("#leadNotes").value = lead.notes || "";
+    const sale = saleForLead(lead.id);
+    $("#leadSaleValue").value = sale && typeof sale.valueCents === "number" && sale.valueCents > 0 ? formatCurrencyInput(sale.valueCents) : "";
+    $("#leadSaleDate").value = (sale && sale.soldAt) || localDateValue();
+    $("#leadSaleNotes").value = (sale && sale.notes) || "";
     $("#deleteLead").classList.remove("hidden");
     $("#addReminderForLead").classList.remove("hidden");
     $("#saveSingleField").classList.remove("hidden");
     resetSingleFieldSave();
+    updateSaleSectionVisibility();
     updateLeadActions(lead);
     leadDialog.showModal();
+  }
+  function updateSaleSectionVisibility() {
+    const section = $("#leadSaleSection");
+    if (!section) return;
+    const sold = $("#leadStatus").value === SOLD_STATUS;
+    section.classList.toggle("hidden", !sold);
+    const hint = $("#leadSaleHint");
+    if (hint) {
+      const id = $("#leadId").value;
+      const sale = id ? saleForLead(id) : null;
+      const pending = sold && (!sale || !(typeof sale.valueCents === "number" && sale.valueCents > 0));
+      hint.textContent = pending ? "Venda sem valor informado: preencha o valor para aparecer nos relatórios." : "O valor e a data alimentam a aba Relatórios.";
+      hint.classList.toggle("report-value-pending", pending);
+    }
   }
   function resetLeadDialog() {
     $("#leadForm").reset();
@@ -822,7 +994,11 @@
     $("#leadWhatsApp").classList.add("hidden");
     $("#leadGoogleProfile").classList.add("hidden");
     $("#saveSingleField").classList.add("hidden");
+    $("#leadSaleValue").value = "";
+    $("#leadSaleDate").value = localDateValue();
+    $("#leadSaleNotes").value = "";
     resetSingleFieldSave();
+    updateSaleSectionVisibility();
   }
   function openNewLead() {
     resetLeadDialog();
@@ -892,6 +1068,7 @@
         location: val("location") || state.promptLocation, reviews: val("reviews"), rating: val("rating"),
         competitor: val("competitor"), competitorReviews: val("competitorReviews"),
         message: val("message"), notes: "", source: "Pesquisa online", status: "Novo",
+        statusHistory: [{ at: new Date().toISOString(), from: "", to: "Novo" }],
         createdAt: new Date().toISOString()
       });
     });
@@ -1206,16 +1383,206 @@
     $("#reminderCountBadge").textContent = String(pending);
     $("#statReminders").textContent = String(pending);
   }
-  function renderAll() { renderPrompt(); renderLeads(); renderAgenda(); }
+  let reportPeriod = "all";
+  function parseLocalDateKey(key) {
+    const parts = String(key || "").split("-").map(Number);
+    return parts.length === 3 && parts[0] ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+  }
+  function earliestActivityKey() {
+    let earliest = "";
+    function consider(key) {
+      if (key && (!earliest || key < earliest)) earliest = key;
+    }
+    state.leads.forEach(function (lead) {
+      consider(dateKeyFromISO(lead.createdAt));
+      (lead.statusHistory || []).forEach(function (entry) { consider(dateKeyFromISO(entry && entry.at)); });
+    });
+    state.sales.forEach(function (sale) { consider(sale.soldAt || dateKeyFromISO(sale.createdAt)); });
+    return earliest;
+  }
+  function reportRange() {
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    if (reportPeriod === "all") {
+      const key = earliestActivityKey();
+      const start = key ? parseLocalDateKey(key) : new Date(end);
+      start.setHours(0, 0, 0, 0);
+      return { start: start, end: end };
+    }
+    let start = new Date(end);
+    if (reportPeriod === "today") start = new Date(end);
+    else if (reportPeriod === "30") start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 29);
+    else if (reportPeriod === "month") start = new Date(end.getFullYear(), end.getMonth(), 1);
+    else start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6);
+    return { start: start, end: end };
+  }
+  function dateKeyFromISO(value) {
+    const ms = Date.parse(value || "");
+    return Number.isFinite(ms) ? localDateKey(new Date(ms)) : "";
+  }
+  function statusAtEndOfDay(lead, endMs) {
+    const history = Array.isArray(lead.statusHistory) ? lead.statusHistory : [];
+    let current = null;
+    for (let i = 0; i < history.length; i += 1) {
+      const at = Date.parse((history[i] && history[i].at) || "");
+      if (!Number.isFinite(at) || at > endMs) continue;
+      current = history[i].to;
+    }
+    return current;
+  }
+  function buildDailyReport(range) {
+    const index = {};
+    const rows = [];
+    for (let day = new Date(range.start); day <= range.end; day.setDate(day.getDate() + 1)) {
+      const key = localDateKey(day);
+      const row = { key: key, date: new Date(day), leadsNew: 0, sent: 0, responded: 0, refused: 0, noReply: 0, sold: 0, soldValue: 0, open: 0 };
+      index[key] = row;
+      rows.push(row);
+    }
+    state.leads.forEach(function (lead) {
+      const createdKey = dateKeyFromISO(lead.createdAt);
+      if (index[createdKey]) index[createdKey].leadsNew += 1;
+      const seen = {};
+      (lead.statusHistory || []).forEach(function (entry) {
+        const key = dateKeyFromISO(entry && entry.at);
+        const to = entry && entry.to;
+        if (!key || !index[key]) return;
+        if (CONTACTED_STATUSES.indexOf(to) >= 0 && !seen["s|" + key]) { seen["s|" + key] = true; index[key].sent += 1; }
+        if (RESPONDED_STATUSES.indexOf(to) >= 0 && !seen["r|" + key]) { seen["r|" + key] = true; index[key].responded += 1; }
+        if (to === "Recusa" && !seen["x|" + key]) { seen["x|" + key] = true; index[key].refused += 1; }
+        if (to === "Sem resposta" && !seen["n|" + key]) { seen["n|" + key] = true; index[key].noReply += 1; }
+      });
+    });
+    state.sales.forEach(function (sale) {
+      const key = sale.soldAt || dateKeyFromISO(sale.createdAt);
+      const row = index[key];
+      if (!row) return;
+      row.sold += 1;
+      if (typeof sale.valueCents === "number" && sale.valueCents > 0) row.soldValue += sale.valueCents;
+    });
+    rows.forEach(function (row) {
+      const day = row.date;
+      const endMs = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999).getTime();
+      state.leads.forEach(function (lead) {
+        const status = statusAtEndOfDay(lead, endMs);
+        if (status && OPEN_STATUSES.indexOf(status) >= 0) row.open += 1;
+      });
+    });
+    return rows;
+  }
+  function conversionText(sold, base) {
+    if (!base) return "—";
+    const pct = (sold / base) * 100;
+    return (pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10) + "%";
+  }
+  function reportCard(label, value, hint, tone) {
+    return '<article class="stat-card' + (tone ? " stat-card-" + tone : "") + '"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong><small>' + escapeHtml(hint || "") + '</small></article>';
+  }
+  function renderReportChart(rows) {
+    const container = $("#reportChart");
+    if (!container) return;
+    if (!rows.length) { container.innerHTML = '<div class="empty-small">Sem dados no período.</div>'; return; }
+    const max = rows.reduce(function (m, row) { return Math.max(m, row.sent, row.sold); }, 0) || 1;
+    container.innerHTML = rows.map(function (row) {
+      const sentHeight = Math.max(Math.round((row.sent / max) * 100), row.sent ? 5 : 0);
+      const soldHeight = Math.max(Math.round((row.sold / max) * 100), row.sold ? 5 : 0);
+      const parts = row.key.split("-");
+      const label = parts[2] + "/" + parts[1];
+      const title = formatDate(row.key) + " · " + row.sent + " mensagem(ns) · " + row.sold + " venda(s)";
+      return '<div class="chart-col" title="' + escapeHtml(title) + '">' +
+        '<div class="chart-bars">' +
+          '<span class="chart-bar chart-bar-sent" style="height:' + sentHeight + '%"></span>' +
+          '<span class="chart-bar chart-bar-sold" style="height:' + soldHeight + '%"></span>' +
+        '</div>' +
+        '<small class="chart-label">' + escapeHtml(label) + '</small>' +
+        (row.sold ? '<small class="chart-value">' + escapeHtml(formatCurrency(row.soldValue)) + '</small>' : "") +
+      '</div>';
+    }).join("");
+  }
+  function renderReportTable(rows) {
+    const table = $("#reportTable");
+    if (!table) return;
+    if (!rows.length) { table.innerHTML = ""; return; }
+    const head = '<thead><tr><th>Dia</th><th>Novos</th><th>Mensagens</th><th>Respostas</th><th>Recusas</th><th>Sem resposta</th><th>Em aberto</th><th>Vendas</th><th>Valor</th><th>Conversão</th></tr></thead>';
+    const body = rows.map(function (row) {
+      return '<tr><td>' + escapeHtml(formatDate(row.key, { weekday: "short", day: "2-digit", month: "2-digit" })) + '</td>' +
+        '<td>' + row.leadsNew + '</td><td>' + row.sent + '</td><td>' + row.responded + '</td><td>' + row.refused + '</td><td>' + row.noReply + '</td><td>' + row.open + '</td><td>' + row.sold + '</td>' +
+        '<td>' + (row.soldValue ? escapeHtml(formatCurrency(row.soldValue)) : "—") + '</td>' +
+        '<td>' + escapeHtml(conversionText(row.sold, row.sent)) + '</td></tr>';
+    }).join("");
+    table.innerHTML = head + '<tbody>' + body + '</tbody>';
+  }
+  function renderRecentSales() {
+    const container = $("#recentSales");
+    if (!container) return;
+    const sales = state.sales.slice().sort(function (a, b) {
+      return String(b.soldAt || "").localeCompare(String(a.soldAt || "")) || (Date.parse(b.updatedAt || "") || 0) - (Date.parse(a.updatedAt || "") || 0);
+    }).slice(0, 12);
+    if (!sales.length) { container.innerHTML = '<div class="empty-small">Nenhuma venda registrada ainda. Marque um lead como Vendido para começar.</div>'; return; }
+    container.innerHTML = sales.map(function (sale) {
+      const lead = state.leads.find(function (item) { return item.id === sale.leadId; });
+      const subtitle = [sale.category, sale.location].filter(Boolean).join(" · ") || "Sem categoria ou região";
+      const value = typeof sale.valueCents === "number" && sale.valueCents > 0 ? escapeHtml(formatCurrency(sale.valueCents)) : '<span class="report-value-pending">valor pendente</span>';
+      const date = sale.soldAt ? formatDate(sale.soldAt, { day: "2-digit", month: "short", year: "numeric" }) : "sem data";
+      return '<article class="sale-row"' + (lead ? ' data-sale-lead="' + escapeHtml(sale.leadId) + '" tabindex="0" role="button" aria-label="Abrir venda de ' + escapeHtml(sale.leadName) + '"' : "") + '>' +
+        '<div class="sale-main"><strong>' + escapeHtml(sale.leadName || "Comércio sem nome") + '</strong><small>' + escapeHtml(subtitle) + " · " + escapeHtml(date) + (lead ? "" : " · lead excluído") + '</small></div>' +
+        '<div class="sale-value">' + value + '</div>' +
+        (lead ? '<span class="lead-arrow">›</span>' : "") + '</article>';
+    }).join("");
+  }
+  function renderReports() {
+    const cards = $("#reportCards");
+    if (!cards) return;
+    const range = reportRange();
+    const rows = buildDailyReport(range);
+    const totals = rows.reduce(function (acc, row) {
+      acc.leadsNew += row.leadsNew; acc.sent += row.sent; acc.responded += row.responded;
+      acc.refused += row.refused; acc.noReply += row.noReply; acc.sold += row.sold; acc.soldValue += row.soldValue;
+      return acc;
+    }, { leadsNew: 0, sent: 0, responded: 0, refused: 0, noReply: 0, sold: 0, soldValue: 0 });
+    const contacted = {};
+    const startKey = rows.length ? rows[0].key : localDateKey(range.start);
+    const endKey = rows.length ? rows[rows.length - 1].key : localDateKey(range.end);
+    state.leads.forEach(function (lead) {
+      (lead.statusHistory || []).forEach(function (entry) {
+        const key = dateKeyFromISO(entry && entry.at);
+        if (key && key >= startKey && key <= endKey && CONTACTED_STATUSES.indexOf(entry.to) >= 0) contacted[lead.id] = true;
+      });
+    });
+    const contactedCount = Object.keys(contacted).length;
+    const openNow = state.leads.filter(function (lead) { return OPEN_STATUSES.indexOf(lead.status) >= 0; }).length;
+    const ticket = totals.sold ? Math.round(totals.soldValue / totals.sold) : null;
+    cards.innerHTML = [
+      reportCard("Mensagens enviadas", String(totals.sent), "no período"),
+      reportCard("Respostas", String(totals.responded), "leads que responderam"),
+      reportCard("Recusas", String(totals.refused), "no período"),
+      reportCard("Sem resposta", String(totals.noReply), "no período"),
+      reportCard("Em aberto", String(openNow), "no pipeline, agora"),
+      reportCard("Novos leads", String(totals.leadsNew), "cadastrados no período"),
+      reportCard("Vendas", String(totals.sold), "no período"),
+      reportCard("Valor vendido", formatCurrency(totals.soldValue), "total no período"),
+      reportCard("Ticket médio", ticket === null ? "—" : formatCurrency(ticket), "por venda"),
+      reportCard("Conversão do período", conversionText(totals.sold, contactedCount), "vendas ÷ contatados", "highlight"),
+      reportCard("Conversão por envio", conversionText(totals.sold, totals.sent), "vendas ÷ mensagens", "highlight")
+    ].join("");
+    renderReportChart(rows);
+    renderReportTable(rows);
+    renderRecentSales();
+    $$(".report-period-button").forEach(function (button) {
+      button.classList.toggle("active", button.dataset.period === reportPeriod);
+    });
+  }
+  function renderAll() { renderPrompt(); renderLeads(); renderAgenda(); renderReports(); }
 
   $$(".nav-item").forEach(function (button) {
     button.addEventListener("click", function () {
       const view = button.dataset.view;
       $$(".page-view").forEach(function (section) { section.classList.toggle("active", section.id === "view-" + view); });
       $$(".nav-item").forEach(function (item) { item.classList.toggle("active", item === button); });
-      $("#topTitle").textContent = { prompt: "Prompt de pesquisa", crm: "Leads", agenda: "Lembretes" }[view];
+      $("#topTitle").textContent = { prompt: "Prompt de pesquisa", crm: "Leads", agenda: "Lembretes", reports: "Relatórios" }[view];
       if (view === "crm") renderLeads();
       if (view === "agenda") renderAgenda();
+      if (view === "reports") renderReports();
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
   });
@@ -1354,6 +1721,23 @@
   }
   $("#leadFilterCategory").addEventListener("change", function (event) { activeCategory = event.target.value; renderLeads(); });
   $("#leadFilterSource").addEventListener("change", function (event) { activeSource = event.target.value; renderLeads(); });
+  $("#leadStatus").addEventListener("change", updateSaleSectionVisibility);
+  $("#leadSaleValue").addEventListener("blur", function () {
+    if (!this.value.trim()) return;
+    const cents = currencyToCents(this.value);
+    if (cents !== null) this.value = formatCurrencyInput(cents);
+  });
+  $$(".report-period-button").forEach(function (button) {
+    button.addEventListener("click", function () { reportPeriod = button.dataset.period; renderReports(); });
+  });
+  $("#recentSales").addEventListener("click", function (event) {
+    const row = event.target.closest("[data-sale-lead]");
+    if (row) openLead(row.dataset.saleLead);
+  });
+  $("#recentSales").addEventListener("keydown", function (event) {
+    const row = event.target.closest("[data-sale-lead]");
+    if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openLead(row.dataset.saleLead); }
+  });
 
   function markSingleFieldChanged(event) {
     const field = singleFieldMap[event.target.id];
@@ -1361,7 +1745,7 @@
     pendingSingleField = event.target.id;
     const button = $("#saveSingleField");
     button.textContent = "Salvar só “" + field[1] + "”";
-    button.disabled = event.target.id === "leadName" && !event.target.value.trim();
+    button.disabled = false;
   }
   $("#leadForm").addEventListener("input", markSingleFieldChanged);
   $("#leadForm").addEventListener("change", markSingleFieldChanged);
@@ -1371,11 +1755,19 @@
     const lead = state.leads.find(function (item) { return item.id === id; });
     if (!lead || !field) return;
     const input = $("#" + pendingSingleField);
-    if (pendingSingleField === "leadName" && !input.value.trim()) return;
-    lead[field[0]] = input.value.trim();
+    if (pendingSingleField === "leadStatus") {
+      const result = finalizeLeadStatus(lead, false, input.value, { value: $("#leadSaleValue").value, date: $("#leadSaleDate").value, notes: $("#leadSaleNotes").value });
+      if (result.error) { showToast(result.error); $("#leadSaleValue").focus(); return; }
+      $("#leadModalEyebrow").textContent = "LEAD · " + lead.status.toUpperCase();
+      updateSaleSectionVisibility();
+    } else {
+      lead[field[0]] = input.value.trim();
+      updateSaleSnapshot(lead);
+    }
     saveState();
     renderLeads();
     renderAgenda();
+    renderReports();
     updateLeadActions(lead);
     const savedLabel = field[1];
     resetSingleFieldSave();
@@ -1392,9 +1784,16 @@
       googleUrl: $("#leadGoogleUrl").value.trim(),
       source: $("#leadSource").value, reviews: $("#leadReviews").value.trim(), rating: $("#leadRating").value.trim(),
       competitor: $("#leadCompetitor").value.trim(), competitorReviews: $("#leadCompetitorReviews").value.trim(),
-      status: $("#leadStatus").value, message: $("#leadMessage").value.trim(), notes: $("#leadNotes").value.trim(),
+      status: current ? current.status : "Novo", message: $("#leadMessage").value.trim(), notes: $("#leadNotes").value.trim(),
+      statusHistory: current && Array.isArray(current.statusHistory) ? current.statusHistory.slice() : [],
       createdAt: current ? current.createdAt : new Date().toISOString()
     };
+    if (!leadPayloadHasData(lead) && !$("#leadSaleValue").value.trim()) {
+      showToast("Preencha ao menos um dado do lead para salvar.");
+      return;
+    }
+    const result = finalizeLeadStatus(lead, !current, $("#leadStatus").value, { value: $("#leadSaleValue").value, date: $("#leadSaleDate").value, notes: $("#leadSaleNotes").value });
+    if (result.error) { showToast(result.error); $("#leadSaleValue").focus(); return; }
     if (current) {
       state.leads = state.leads.map(function (item) { return item.id === id ? lead : item; });
       showToast("Lead atualizado.");
@@ -1406,6 +1805,7 @@
     leadDialog.close();
     renderLeads();
     renderAgenda();
+    renderReports();
   });
   $("#deleteLead").addEventListener("click", function () {
     const id = $("#leadId").value;

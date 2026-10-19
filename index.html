@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=22">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=20" defer></script>
+  <script src="app.js?v=22" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -34,6 +34,7 @@
         <button class="nav-item active" data-view="prompt"><span class="nav-icon">✳</span><span>Prompt de pesquisa</span></button>
         <button class="nav-item" data-view="crm"><span class="nav-icon">▤</span><span>Leads</span><span id="leadCountBadge" class="nav-count">0</span></button>
         <button class="nav-item" data-view="agenda"><span class="nav-icon">▦</span><span>Lembretes</span><span id="reminderCountBadge" class="nav-count">0</span></button>
+        <button class="nav-item" data-view="reports"><span class="nav-icon">▥</span><span>Relatórios</span></button>
       </nav>
       <div class="sidebar-bottom">
         <div class="local-note"><span class="status-dot"></span><div><strong id="sidebarSyncTitle">Conectando</strong><small id="sidebarSyncDetail">Preparando sua conta</small></div></div>
@@ -101,7 +102,7 @@
         <div class="stats-row">
           <article class="stat-card"><span>Total de leads</span><strong id="statTotal">0</strong><small>na sua lista</small></article>
           <article class="stat-card"><span>Em conversa</span><strong id="statActive">0</strong><small>contatados ou em proposta</small></article>
-          <article class="stat-card"><span>Fechados</span><strong id="statWon">0</strong><small>marcados como fechados</small></article>
+          <article class="stat-card"><span>Vendidos</span><strong id="statWon">0</strong><small id="statWonHint">sem valor informado</small></article>
           <article class="stat-card stat-card-highlight"><span>Próximos lembretes</span><strong id="statReminders">0</strong><small>pendentes</small></article>
         </div>
         <section class="panel import-panel hidden" id="importPanel">
@@ -128,7 +129,7 @@
               <button class="filter-tab" data-status="Mandei">Mandei</button>
               <button class="filter-tab" data-status="Respondeu">Respondeu</button>
               <button class="filter-tab" data-status="Proposta">Proposta</button>
-              <button class="filter-tab" data-status="Fechou">Fechou</button>
+              <button class="filter-tab" data-status="Vendido">Vendido</button>
               <button class="filter-tab" data-status="Sem resposta">Sem resposta</button>
               <button class="filter-tab" data-status="Recusa">Recusa</button>
             </div>
@@ -156,6 +157,32 @@
         <div id="reminderList" class="reminder-list"></div>
         <div id="emptyAgenda" class="empty-state"><div class="empty-illustration">▦</div><h3>Nenhum lembrete por enquanto</h3><p>Crie um lembrete para uma visita, retorno ou detalhe importante de uma venda.</p><button class="button button-primary" id="emptyReminder">Criar lembrete</button></div>
       </section>
+
+      <section class="page-view" id="view-reports">
+        <div class="page-heading crm-heading">
+          <div><div class="eyebrow">RESULTADOS</div><h1>Relatórios</h1><p>Acompanhe por dia as mensagens enviadas, recusas, sem resposta, leads em aberto e vendas.</p></div>
+          <div class="report-period" id="reportPeriod" role="group" aria-label="Período do relatório">
+            <button class="report-period-button" data-period="today">Hoje</button>
+            <button class="report-period-button active" data-period="7">7 dias</button>
+            <button class="report-period-button" data-period="30">30 dias</button>
+            <button class="report-period-button" data-period="month">Este mês</button>
+            <button class="report-period-button" data-period="all">Tudo</button>
+          </div>
+        </div>
+        <div class="stats-row report-cards" id="reportCards"></div>
+        <section class="panel report-panel">
+          <div class="panel-heading report-heading"><div><h2>Movimento por dia</h2><p><span class="legend legend-sent"></span> mensagens enviadas · <span class="legend legend-sold"></span> vendas</p></div></div>
+          <div class="report-chart" id="reportChart"></div>
+        </section>
+        <section class="panel report-panel">
+          <div class="panel-heading report-heading"><div><h2>Resumo diário</h2><p>Conversão do dia = vendas ÷ mensagens enviadas naquele dia.</p></div></div>
+          <div class="report-table-wrap"><table class="report-table" id="reportTable"></table></div>
+        </section>
+        <section class="panel report-panel">
+          <div class="panel-heading report-heading"><div><h2>Últimas vendas</h2><p>Clique em uma venda para abrir a ficha do comércio.</p></div></div>
+          <div class="recent-sales" id="recentSales"></div>
+        </section>
+      </section>
     </main>
   </div>
 
@@ -172,7 +199,7 @@
         <section class="form-section">
           <div class="form-section-title">Contato</div>
           <div class="form-grid two-col">
-            <label class="span-two">Nome do comércio<input id="leadName" required placeholder="Ex.: Barbearia do Centro"></label>
+            <label class="span-two">Nome do comércio<input id="leadName" placeholder="Ex.: Barbearia do Centro"></label>
             <label>WhatsApp com DDD<input id="leadPhone" inputmode="tel" placeholder="Ex.: 13999990000"></label>
             <label>Categoria<input id="leadCategory" placeholder="Ex.: Barbearia"></label>
             <label>Bairro e cidade<input id="leadLocation" placeholder="Ex.: Centro, Santos"></label>
@@ -181,7 +208,7 @@
         <section class="form-section">
           <div class="form-section-title">Google e concorrência</div>
           <div class="form-grid two-col">
-            <label class="span-two">Link direto da ficha no Google Maps<input id="leadGoogleUrl" type="url" placeholder="https://maps.app.goo.gl/... ou link do Google Maps"></label>
+            <label class="span-two">Link direto da ficha no Google Maps<input id="leadGoogleUrl" type="text" inputmode="url" placeholder="https://maps.app.goo.gl/... ou link do Google Maps"></label>
             <label>Avaliações do comércio<input id="leadReviews" inputmode="numeric" placeholder="Ex.: 31"></label>
             <label>Nota média<input id="leadRating" inputmode="decimal" placeholder="Ex.: 4,8"></label>
             <label>Concorrente<input id="leadCompetitor" placeholder="Nome do concorrente"></label>
@@ -192,8 +219,17 @@
           <div class="form-section-title">Prospecção</div>
           <div class="form-grid two-col">
             <label>Origem da prospecção<select id="leadSource"><option>Prospecção na rua</option><option>WhatsApp</option><option>Indicação</option><option>Pesquisa online</option><option>Outro</option></select></label>
-            <label>Status<select id="leadStatus"><option>Novo</option><option>Mandei</option><option>Respondeu</option><option>Proposta</option><option>Fechou</option><option>Sem resposta</option><option>Recusa</option></select></label>
+            <label>Status<select id="leadStatus"><option>Novo</option><option>Mandei</option><option>Respondeu</option><option>Proposta</option><option>Vendido</option><option>Sem resposta</option><option>Recusa</option></select></label>
           </div>
+        </section>
+        <section class="form-section hidden" id="leadSaleSection">
+          <div class="form-section-title">Dados da venda</div>
+          <div class="form-grid two-col">
+            <label>Valor da venda (R$)<input id="leadSaleValue" inputmode="decimal" placeholder="Ex.: 1.500,00"></label>
+            <label>Data da venda<input id="leadSaleDate" type="date"></label>
+            <label class="span-two">Observação da venda<input id="leadSaleNotes" placeholder="Ex.: pagou metade na entrega"></label>
+          </div>
+          <p class="report-value-help" id="leadSaleHint">O valor e a data alimentam a aba Relatórios.</p>
         </section>
         <section class="form-section">
           <div class="form-section-title">Mensagem e observações</div>
