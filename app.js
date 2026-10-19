@@ -1483,30 +1483,40 @@
     if (!container) return;
     if (!rows.length) { container.innerHTML = '<div class="empty-small">Sem dados no período.</div>'; return; }
     const max = rows.reduce(function (m, row) { return Math.max(m, row.sent, row.sold); }, 0) || 1;
-    container.innerHTML = rows.map(function (row) {
+    const bars = rows.map(function (row) {
       const sentHeight = Math.max(Math.round((row.sent / max) * 100), row.sent ? 5 : 0);
       const soldHeight = Math.max(Math.round((row.sold / max) * 100), row.sold ? 5 : 0);
       const parts = row.key.split("-");
       const label = parts[2] + "/" + parts[1];
-      const title = formatDate(row.key) + " · " + row.sent + " mensagem(ns) · " + row.sold + " venda(s)";
+      const title = formatDate(row.key) + " — " + row.sent + " mensagem(ns), " + row.sold + " venda(s)" + (row.soldValue ? ", " + formatCurrency(row.soldValue) : "");
       return '<div class="chart-col" title="' + escapeHtml(title) + '">' +
         '<div class="chart-bars">' +
           '<span class="chart-bar chart-bar-sent" style="height:' + sentHeight + '%"></span>' +
           '<span class="chart-bar chart-bar-sold" style="height:' + soldHeight + '%"></span>' +
         '</div>' +
         '<small class="chart-label">' + escapeHtml(label) + '</small>' +
-        (row.sold ? '<small class="chart-value">' + escapeHtml(formatCurrency(row.soldValue)) + '</small>' : "") +
       '</div>';
     }).join("");
+    const soldRows = rows.filter(function (row) { return row.sold > 0; });
+    let footer = "";
+    if (soldRows.length) {
+      footer = '<div class="chart-sales">' + soldRows.map(function (row) {
+        const parts = row.key.split("-");
+        return '<span class="chart-sale-chip"><b>' + escapeHtml(parts[2] + "/" + parts[1]) + '</b> ' + escapeHtml(formatCurrency(row.soldValue)) + '</span>';
+      }).join("") + '</div>';
+    }
+    container.innerHTML = '<div class="chart-scroll"><div class="chart-track">' + bars + '</div></div>' + footer;
   }
   function renderReportTable(rows) {
     const table = $("#reportTable");
     if (!table) return;
     if (!rows.length) { table.innerHTML = ""; return; }
-    const head = '<thead><tr><th>Dia</th><th>Novos</th><th>Mensagens</th><th>Respostas</th><th>Recusas</th><th>Sem resposta</th><th>Em aberto</th><th>Vendas</th><th>Valor</th><th>Conversão</th></tr></thead>';
+    const head = '<thead><tr><th>Dia</th><th>Novos</th><th>Mensagens</th><th>Respostas</th><th>Recusas</th><th>Sem resposta</th><th>Aguardando</th><th>Em aberto</th><th>Vendas</th><th>Valor</th><th>Conversão</th></tr></thead>';
     const body = rows.map(function (row) {
+      const waiting = Math.max(row.sent - row.responded - row.refused - row.noReply, 0);
       return '<tr><td>' + escapeHtml(formatDate(row.key, { weekday: "short", day: "2-digit", month: "2-digit" })) + '</td>' +
-        '<td>' + row.leadsNew + '</td><td>' + row.sent + '</td><td>' + row.responded + '</td><td>' + row.refused + '</td><td>' + row.noReply + '</td><td>' + row.open + '</td><td>' + row.sold + '</td>' +
+        '<td>' + row.leadsNew + '</td><td>' + row.sent + '</td><td>' + row.responded + '</td><td>' + row.refused + '</td><td>' + row.noReply + '</td>' +
+        '<td>' + waiting + '</td><td>' + row.open + '</td><td>' + row.sold + '</td>' +
         '<td>' + (row.soldValue ? escapeHtml(formatCurrency(row.soldValue)) : "—") + '</td>' +
         '<td>' + escapeHtml(conversionText(row.sold, row.sent)) + '</td></tr>';
     }).join("");
@@ -1551,12 +1561,14 @@
     });
     const contactedCount = Object.keys(contacted).length;
     const openNow = state.leads.filter(function (lead) { return OPEN_STATUSES.indexOf(lead.status) >= 0; }).length;
+    const waiting = Math.max(totals.sent - totals.responded - totals.refused - totals.noReply, 0);
     const ticket = totals.sold ? Math.round(totals.soldValue / totals.sold) : null;
     cards.innerHTML = [
-      reportCard("Mensagens enviadas", String(totals.sent), "no período"),
-      reportCard("Respostas", String(totals.responded), "leads que responderam"),
-      reportCard("Recusas", String(totals.refused), "no período"),
-      reportCard("Sem resposta", String(totals.noReply), "no período"),
+      reportCard("Mensagens enviadas", String(totals.sent), "leads contatados no período"),
+      reportCard("Respostas", String(totals.responded), "dos contatados no período"),
+      reportCard("Recusas", String(totals.refused), "dos contatados no período"),
+      reportCard("Sem resposta", String(totals.noReply), "dos contatados no período"),
+      reportCard("Aguardando resposta", String(waiting), "contatados sem desfecho ainda"),
       reportCard("Em aberto", String(openNow), "no pipeline, agora"),
       reportCard("Novos leads", String(totals.leadsNew), "cadastrados no período"),
       reportCard("Vendas", String(totals.sold), "no período"),
