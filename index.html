@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=19" defer></script>
+  <script src="app.js?v=20" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -130,8 +130,15 @@
               <button class="filter-tab" data-status="Proposta">Proposta</button>
               <button class="filter-tab" data-status="Fechou">Fechou</button>
               <button class="filter-tab" data-status="Sem resposta">Sem resposta</button>
+              <button class="filter-tab" data-status="Recusa">Recusa</button>
             </div>
             <label class="search-box"><span>⌕</span><input id="leadSearch" placeholder="Buscar comércio..." aria-label="Buscar leads"></label>
+            <div class="lead-toolbar-filters">
+              <span class="lead-result-count" id="leadResultCount" aria-live="polite">0 leads</span>
+              <label class="toolbar-select">Categoria<select id="leadFilterCategory"><option value="Todas">Todas</option></select></label>
+              <label class="toolbar-select">Origem<select id="leadFilterSource"><option value="Todas">Todas</option></select></label>
+              <label class="toolbar-select toolbar-select-sort">Ordenar por<select id="leadSort"><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="nome-az">Nome (A–Z)</option><option value="nome-za">Nome (Z–A)</option><option value="categoria">Categoria (A–Z)</option><option value="origem">Origem da prospecção</option><option value="regiao">Região</option><option value="status">Status do pipeline</option><option value="nota">Maior nota</option><option value="avaliacoes">Mais avaliações</option><option value="gap">Maior gap de avaliações</option></select></label>
+            </div>
           </div>
           <div id="leadList" class="lead-list"></div>
           <div id="emptyLeads" class="empty-state"><div class="empty-illustration">▤</div><h3>Sua lista começa aqui</h3><p>Cole uma tabela gerada pela IA ou adicione um comércio manualmente.</p><div><button class="button button-secondary" id="emptyImport">Colar tabela</button><button class="button button-primary" id="emptyAdd">Adicionar lead</button></div></div>
@@ -185,7 +192,7 @@
           <div class="form-section-title">Prospecção</div>
           <div class="form-grid two-col">
             <label>Origem da prospecção<select id="leadSource"><option>Prospecção na rua</option><option>WhatsApp</option><option>Indicação</option><option>Pesquisa online</option><option>Outro</option></select></label>
-            <label>Status<select id="leadStatus"><option>Novo</option><option>Mandei</option><option>Respondeu</option><option>Proposta</option><option>Fechou</option><option>Sem resposta</option></select></label>
+            <label>Status<select id="leadStatus"><option>Novo</option><option>Mandei</option><option>Respondeu</option><option>Proposta</option><option>Fechou</option><option>Sem resposta</option><option>Recusa</option></select></label>
           </div>
         </section>
         <section class="form-section">

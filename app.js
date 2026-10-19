@@ -3,13 +3,27 @@
   const STORAGE_KEY = "praca-crm-local-v1";
   const LEGACY_MIGRATED_KEY = "praca-crm-legacy-migrated-v1";
   const SIDEBAR_KEY = "praca-crm-sidebar-collapsed-v1";
+  const LEAD_SORT_KEY = "praca-crm-lead-sort-v1";
   const THEME_KEY = "praca-crm-theme-v1";
   const SYNC_META_PREFIX = "praca-crm-sync-v1:";
   const USER_STATE_PREFIX = "praca-crm-user-v1:";
   const supabaseConfig = window.PRACA_CRM_SUPABASE || {};
   let supabase = null;
   let supabaseReadyPromise = null;
-  const STATUSES = ["Novo", "Mandei", "Respondeu", "Proposta", "Fechou", "Sem resposta"];
+  const STATUSES = ["Novo", "Mandei", "Respondeu", "Proposta", "Fechou", "Sem resposta", "Recusa"];
+  const LEAD_SORTS = [
+    ["recentes", "Mais recentes"],
+    ["antigos", "Mais antigos"],
+    ["nome-az", "Nome (A–Z)"],
+    ["nome-za", "Nome (Z–A)"],
+    ["categoria", "Categoria (A–Z)"],
+    ["origem", "Origem da prospecção"],
+    ["regiao", "Região"],
+    ["status", "Status do pipeline"],
+    ["nota", "Maior nota"],
+    ["avaliacoes", "Mais avaliações"],
+    ["gap", "Maior gap de avaliações"]
+  ];
   const messageRule = "- Uma única mensagem de abertura para WhatsApp, em português, curta, natural e pronta para enviar. Siga este modelo, adaptando apenas dados confirmados: \"Oi, tudo bem? Encontrei a {comércio} no Google e vi nota {nota} com {avaliações} avaliações; a {concorrente}, da mesma região e categoria, aparece com {avaliações do concorrente}. Trabalho com placas NFC/QR para facilitar avaliações: vocês já têm algum processo para convidar clientes satisfeitos a avaliar?\" Faça somente essa versão e uma pergunta. Se não houver comparação local confirmada, retire apenas o trecho do concorrente. Não invente elogios ou fatos, não finja ser cliente e não afirme que a diferença de avaliações causa perda de clientes ou pior posição no Google.";
   const defaultPrompt = [
     "Você é meu assistente de prospecção. Eu vendo placas NFC/QR que facilitam o cliente deixar avaliação no Google para comércios locais.",
@@ -121,6 +135,13 @@
   let lastStateSnapshot = JSON.parse(JSON.stringify(state));
   let authMode = "login";
   let activeStatus = "Todos";
+  let activeCategory = "Todas";
+  let activeSource = "Todas";
+  let leadSort = "recentes";
+  try {
+    const savedSort = localStorage.getItem(LEAD_SORT_KEY);
+    if (savedSort && LEAD_SORTS.some(function (option) { return option[0] === savedSort; })) leadSort = savedSort;
+  } catch (_) {}
   let agendaFilter = "upcoming";
   let toastTimer;
   let pendingImport = null;
@@ -514,6 +535,45 @@
     const own = numeric(lead.reviews);
     return competitor === null || own === null ? null : competitor - own;
   }
+  function ratingValue(value) {
+    const text = String(value == null ? "" : value).replace(/\s/g, "").replace(",", ".");
+    if (!text) return null;
+    const parsed = parseFloat(text);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  function leadTimestamp(lead) {
+    const parsed = Date.parse((lead && lead.createdAt) || "");
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  function compareText(a, b) {
+    return String(a || "").localeCompare(String(b || ""), "pt-BR", { sensitivity: "base" });
+  }
+  function compareDesc(a, b) {
+    const left = a == null || Number.isNaN(a) ? null : a;
+    const right = b == null || Number.isNaN(b) ? null : b;
+    if (left === null && right === null) return 0;
+    if (left === null) return 1;
+    if (right === null) return -1;
+    return right - left;
+  }
+  function sortLeads(list) {
+    const byName = function (a, b) { return compareText(a.name, b.name); };
+    return list.slice().sort(function (a, b) {
+      switch (leadSort) {
+        case "antigos": return leadTimestamp(a) - leadTimestamp(b) || byName(a, b);
+        case "nome-az": return compareText(a.name, b.name);
+        case "nome-za": return compareText(b.name, a.name);
+        case "categoria": return compareText(a.category, b.category) || byName(a, b);
+        case "origem": return compareText(a.source, b.source) || byName(a, b);
+        case "regiao": return compareText(a.location, b.location) || byName(a, b);
+        case "status": return STATUSES.indexOf(a.status || "Novo") - STATUSES.indexOf(b.status || "Novo") || byName(a, b);
+        case "nota": return compareDesc(ratingValue(a.rating), ratingValue(b.rating)) || byName(a, b);
+        case "avaliacoes": return compareDesc(numeric(a.reviews), numeric(b.reviews)) || byName(a, b);
+        case "gap": return compareDesc(gapFor(a), gapFor(b)) || byName(a, b);
+        default: return leadTimestamp(b) - leadTimestamp(a) || byName(a, b);
+      }
+    });
+  }
   function showToast(message) {
     const toast = $("#toast");
     toast.textContent = message;
@@ -648,13 +708,35 @@
     } catch (_) { return ""; }
   }
 
+  function updateLeadFilterOptions() {
+    activeCategory = fillFilterSelect($("#leadFilterCategory"), activeCategory, "category");
+    activeSource = fillFilterSelect($("#leadFilterSource"), activeSource, "source");
+  }
+  function fillFilterSelect(select, activeValue, field) {
+    if (!select) return activeValue;
+    const seen = {};
+    state.leads.forEach(function (lead) {
+      const value = String(lead[field] || "").trim();
+      if (value) seen[value] = true;
+    });
+    const options = ["Todas"].concat(Object.keys(seen).sort(compareText));
+    const value = options.indexOf(activeValue) >= 0 ? activeValue : "Todas";
+    select.innerHTML = options.map(function (option) {
+      return '<option value="' + escapeHtml(option) + '">' + escapeHtml(option) + "</option>";
+    }).join("");
+    select.value = value;
+    return value;
+  }
   function renderLeads() {
+    updateLeadFilterOptions();
     const query = normalize($("#leadSearch").value.trim());
-    const visible = state.leads.filter(function (lead) {
+    const visible = sortLeads(state.leads.filter(function (lead) {
       const statusMatches = activeStatus === "Todos" || lead.status === activeStatus;
       const searchMatches = !query || normalize([lead.name, lead.phone, lead.category, lead.location, lead.competitor, lead.source].join(" ")).includes(query);
-      return statusMatches && searchMatches;
-    });
+      const categoryMatches = activeCategory === "Todas" || String(lead.category || "") === activeCategory;
+      const sourceMatches = activeSource === "Todas" || String(lead.source || "") === activeSource;
+      return statusMatches && searchMatches && categoryMatches && sourceMatches;
+    }));
     $("#leadList").innerHTML = visible.map(function (lead) {
       const gap = gapFor(lead);
       const gapText = gap === null ? "Gap não informado" : (gap > 0 ? "+" : "") + gap + " avaliações";
@@ -670,6 +752,10 @@
     }).join("");
     $$(".filter-tab").forEach(function (button) { button.classList.toggle("active", button.dataset.status === activeStatus); });
     $("#filterCountTodos").textContent = String(state.leads.length);
+    const resultCount = $("#leadResultCount");
+    if (resultCount) {
+      resultCount.textContent = visible.length + (visible.length === 1 ? " lead" : " leads") + (visible.length < state.leads.length ? " de " + state.leads.length : "");
+    }
     $("#emptyLeads").classList.toggle("hidden", state.leads.length > 0);
     $("#noResults").classList.toggle("hidden", state.leads.length === 0 || visible.length > 0);
     $("#leadList").classList.toggle("hidden", state.leads.length === 0 || visible.length === 0);
@@ -1257,6 +1343,17 @@
   $$(".filter-tab").forEach(function (button) {
     button.addEventListener("click", function () { activeStatus = button.dataset.status; renderLeads(); });
   });
+  const leadSortSelect = $("#leadSort");
+  if (leadSortSelect) {
+    leadSortSelect.value = leadSort;
+    leadSortSelect.addEventListener("change", function (event) {
+      leadSort = event.target.value;
+      try { localStorage.setItem(LEAD_SORT_KEY, leadSort); } catch (_) {}
+      renderLeads();
+    });
+  }
+  $("#leadFilterCategory").addEventListener("change", function (event) { activeCategory = event.target.value; renderLeads(); });
+  $("#leadFilterSource").addEventListener("change", function (event) { activeSource = event.target.value; renderLeads(); });
 
   function markSingleFieldChanged(event) {
     const field = singleFieldMap[event.target.id];
