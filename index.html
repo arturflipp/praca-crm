@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=18" defer></script>
+  <script src="app.js?v=19" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -154,26 +154,49 @@
 
   <dialog id="leadDialog" class="modal">
     <form id="leadForm" method="dialog">
-      <div class="modal-header"><div><div class="eyebrow" id="leadModalEyebrow">NOVO REGISTRO</div><h2 id="leadModalTitle">Adicionar lead</h2></div><button class="icon-button" type="button" data-close="leadDialog" aria-label="Fechar">×</button></div>
+      <div class="modal-header"><div><div class="eyebrow" id="leadModalEyebrow">NOVO REGISTRO</div><h2 id="leadModalTitle">Adicionar lead</h2></div><div class="modal-header-actions"><button class="icon-button icon-button-danger hidden" type="button" id="deleteLead" aria-label="Excluir lead" title="Excluir lead"><svg aria-hidden="true" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4m2.2 0-.6 9.2a1 1 0 0 1-1 .9H5.4a1 1 0 0 1-1-.9L3.8 4m2.7 2.2v5m3-5v5"/></svg></button><button class="icon-button" type="button" data-close="leadDialog" aria-label="Fechar">×</button></div></div>
       <input type="hidden" id="leadId">
       <div class="modal-body">
-        <div class="form-grid two-col">
-          <label class="span-two">Nome do comércio<input id="leadName" required placeholder="Ex.: Barbearia do Centro"></label>
-          <label>WhatsApp com DDD<input id="leadPhone" inputmode="tel" placeholder="Ex.: 13999990000"></label>
-          <label>Categoria<input id="leadCategory" placeholder="Ex.: Barbearia"></label>
-          <label>Bairro e cidade<input id="leadLocation" placeholder="Ex.: Centro, Santos"></label>
-          <label>Origem da prospecção<select id="leadSource"><option>Prospecção na rua</option><option>WhatsApp</option><option>Indicação</option><option>Pesquisa online</option><option>Outro</option></select></label>
-          <label>Avaliações do comércio<input id="leadReviews" inputmode="numeric" placeholder="Ex.: 31"></label>
-          <label>Nota média<input id="leadRating" inputmode="decimal" placeholder="Ex.: 4,8"></label>
-          <label>Concorrente<input id="leadCompetitor" placeholder="Nome do concorrente"></label>
-          <label>Avaliações do concorrente<input id="leadCompetitorReviews" inputmode="numeric" placeholder="Ex.: 280"></label>
-          <label class="span-two">Link direto da ficha no Google Maps<input id="leadGoogleUrl" type="url" placeholder="https://maps.app.goo.gl/... ou link do Google Maps"></label>
-          <label>Status<select id="leadStatus"><option>Novo</option><option>Mandei</option><option>Respondeu</option><option>Proposta</option><option>Fechou</option><option>Sem resposta</option></select></label>
-          <label class="span-two">Mensagem sugerida<textarea id="leadMessage" rows="3" placeholder="Mensagem que você pretende usar"></textarea></label>
-          <label class="span-two">Observações sobre a conversa ou venda<textarea id="leadNotes" rows="4" placeholder="Ex.: prefere visita à tarde; pediu para falar após o dia 20; negociar kit de balcão."></textarea></label>
+        <div class="lead-quick-actions" id="leadQuickActions">
+          <a class="quick-chip hidden" id="leadWhatsApp" target="_blank" rel="noreferrer"><span aria-hidden="true">✆</span> Abrir WhatsApp</a>
+          <a class="quick-chip hidden" id="leadGoogleProfile" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">⌖</span> Ficha no Google</a>
+          <button class="quick-chip hidden" type="button" id="addReminderForLead"><span aria-hidden="true">＋</span> Novo lembrete</button>
         </div>
+        <section class="form-section">
+          <div class="form-section-title">Contato</div>
+          <div class="form-grid two-col">
+            <label class="span-two">Nome do comércio<input id="leadName" required placeholder="Ex.: Barbearia do Centro"></label>
+            <label>WhatsApp com DDD<input id="leadPhone" inputmode="tel" placeholder="Ex.: 13999990000"></label>
+            <label>Categoria<input id="leadCategory" placeholder="Ex.: Barbearia"></label>
+            <label>Bairro e cidade<input id="leadLocation" placeholder="Ex.: Centro, Santos"></label>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-title">Google e concorrência</div>
+          <div class="form-grid two-col">
+            <label class="span-two">Link direto da ficha no Google Maps<input id="leadGoogleUrl" type="url" placeholder="https://maps.app.goo.gl/... ou link do Google Maps"></label>
+            <label>Avaliações do comércio<input id="leadReviews" inputmode="numeric" placeholder="Ex.: 31"></label>
+            <label>Nota média<input id="leadRating" inputmode="decimal" placeholder="Ex.: 4,8"></label>
+            <label>Concorrente<input id="leadCompetitor" placeholder="Nome do concorrente"></label>
+            <label>Avaliações do concorrente<input id="leadCompetitorReviews" inputmode="numeric" placeholder="Ex.: 280"></label>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-title">Prospecção</div>
+          <div class="form-grid two-col">
+            <label>Origem da prospecção<select id="leadSource"><option>Prospecção na rua</option><option>WhatsApp</option><option>Indicação</option><option>Pesquisa online</option><option>Outro</option></select></label>
+            <label>Status<select id="leadStatus"><option>Novo</option><option>Mandei</option><option>Respondeu</option><option>Proposta</option><option>Fechou</option><option>Sem resposta</option></select></label>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-title">Mensagem e observações</div>
+          <div class="form-grid">
+            <label>Mensagem sugerida<textarea id="leadMessage" rows="3" placeholder="Mensagem que você pretende usar"></textarea></label>
+            <label>Observações sobre a conversa ou venda<textarea id="leadNotes" rows="4" placeholder="Ex.: prefere visita à tarde; pediu para falar após o dia 20; negociar kit de balcão."></textarea></label>
+          </div>
+        </section>
       </div>
-      <div class="modal-footer"><button class="button button-danger hidden" type="button" id="deleteLead">Excluir lead</button><button class="button button-secondary hidden" type="button" id="addReminderForLead">＋ Lembrete</button><span class="footer-spacer"></span><button class="button button-secondary hidden" type="button" id="saveSingleField" disabled>Salvar só o campo editado</button><a class="button button-secondary hidden" id="leadGoogleProfile" target="_blank" rel="noopener noreferrer">Ficha no Google ↗</a><a class="button button-secondary hidden" id="leadWhatsApp" target="_blank" rel="noreferrer">Abrir WhatsApp ↗</a><button class="button button-secondary" type="button" data-close="leadDialog">Cancelar</button><button class="button button-primary" type="submit">Salvar lead</button></div>
+      <div class="modal-footer"><button class="text-button hidden" type="button" id="saveSingleField" disabled>Salvar só o campo editado</button><span class="footer-spacer"></span><button class="button button-secondary" type="button" data-close="leadDialog">Cancelar</button><button class="button button-primary" type="submit">Salvar lead</button></div>
     </form>
   </dialog>
 
