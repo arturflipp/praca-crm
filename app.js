@@ -212,6 +212,8 @@
   let toastTimer;
   let pendingImport = null;
   let pendingSingleField = "";
+  let saleExitDecision = "";
+  let leadOpenedStatus = "";
   const $ = (selector, root) => (root || document).querySelector(selector);
   const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
   function setTheme(theme, persist) {
@@ -707,8 +709,7 @@
       if (cents === null || cents <= 0) return { error: "Informe o valor da venda para marcar como Vendido." };
       upsertSaleForLead(lead, { valueCents: cents, soldAt: saleFields.date || localDateValue(), notes: saleFields.notes || "" });
     } else if (!isNew && previous === SOLD_STATUS) {
-      const keep = window.confirm("Manter a venda de " + (lead.name || "este lead") + " no histórico de relatórios?\n\nOK = manter no histórico · Cancelar = excluir a venda.");
-      if (keep) updateSaleSnapshot(lead);
+      if (saleExitDecision === "keep") updateSaleSnapshot(lead);
       else removeSaleForLead(lead.id);
     }
     if (isNew) {
@@ -940,6 +941,8 @@
   function openLead(id) {
     const lead = state.leads.find(function (item) { return item.id === id; });
     if (!lead) return;
+    leadOpenedStatus = lead.status;
+    saleExitDecision = "";
     $("#leadId").value = lead.id;
     $("#leadModalEyebrow").textContent = "LEAD · " + (lead.status || "Novo").toUpperCase();
     $("#leadModalTitle").textContent = "Editar lead";
@@ -971,19 +974,35 @@
   function updateSaleSectionVisibility() {
     const section = $("#leadSaleSection");
     if (!section) return;
-    const sold = $("#leadStatus").value === SOLD_STATUS;
+    const id = $("#leadId").value;
+    const selected = $("#leadStatus").value;
+    const sold = selected === SOLD_STATUS;
     section.classList.toggle("hidden", !sold);
     const hint = $("#leadSaleHint");
     if (hint) {
-      const id = $("#leadId").value;
       const sale = id ? saleForLead(id) : null;
       const pending = sold && (!sale || !(typeof sale.valueCents === "number" && sale.valueCents > 0));
       hint.textContent = pending ? "Venda sem valor informado: preencha o valor para aparecer nos relatórios." : "O valor e a data alimentam a aba Relatórios.";
       hint.classList.toggle("report-value-pending", pending);
     }
+    const exit = $("#leadSaleExitSection");
+    if (exit) {
+      const hadSale = Boolean(id && saleForLead(id));
+      const leavingSold = Boolean(id) && leadOpenedStatus === SOLD_STATUS && !sold && hadSale;
+      exit.classList.toggle("hidden", !leavingSold);
+      if (!leavingSold) saleExitDecision = "";
+    }
+  }
+  function ensureSaleExitDecision() {
+    if (saleExitDecision) return true;
+    const exit = $("#leadSaleExitSection");
+    if (exit) exit.classList.remove("hidden");
+    return false;
   }
   function resetLeadDialog() {
     $("#leadForm").reset();
+    leadOpenedStatus = "";
+    saleExitDecision = "";
     $("#leadId").value = "";
     $("#leadModalEyebrow").textContent = "NOVO REGISTRO";
     $("#leadModalTitle").textContent = "Adicionar lead";
@@ -1733,7 +1752,20 @@
   }
   $("#leadFilterCategory").addEventListener("change", function (event) { activeCategory = event.target.value; renderLeads(); });
   $("#leadFilterSource").addEventListener("change", function (event) { activeSource = event.target.value; renderLeads(); });
-  $("#leadStatus").addEventListener("change", updateSaleSectionVisibility);
+  $("#leadStatus").addEventListener("change", function () {
+    saleExitDecision = "";
+    updateSaleSectionVisibility();
+  });
+  $("#keepSaleOnExit").addEventListener("click", function () {
+    saleExitDecision = "keep";
+    $("#leadSaleExitSection").classList.add("hidden");
+    showToast("Venda será mantida no histórico de relatórios.");
+  });
+  $("#removeSaleOnExit").addEventListener("click", function () {
+    saleExitDecision = "remove";
+    $("#leadSaleExitSection").classList.add("hidden");
+    showToast("Venda será excluída ao salvar.");
+  });
   $("#leadSaleValue").addEventListener("blur", function () {
     if (!this.value.trim()) return;
     const cents = currencyToCents(this.value);
@@ -1767,15 +1799,23 @@
     const lead = state.leads.find(function (item) { return item.id === id; });
     if (!lead || !field) return;
     const input = $("#" + pendingSingleField);
-    if (pendingSingleField === "leadStatus") {
-      const result = finalizeLeadStatus(lead, false, input.value, { value: $("#leadSaleValue").value, date: $("#leadSaleDate").value, notes: $("#leadSaleNotes").value });
+    const statusChanged = leadOpenedStatus === SOLD_STATUS && $("#leadStatus").value !== SOLD_STATUS && Boolean(saleForLead(lead.id));
+    if (statusChanged && !ensureSaleExitDecision()) {
+      showToast("Escolha o que fazer com a venda registrada antes de salvar.");
+      return;
+    }
+    if (pendingSingleField === "leadStatus" || statusChanged) {
+      const result = finalizeLeadStatus(lead, false, $("#leadStatus").value, { value: $("#leadSaleValue").value, date: $("#leadSaleDate").value, notes: $("#leadSaleNotes").value });
       if (result.error) { showToast(result.error); $("#leadSaleValue").focus(); return; }
+      leadOpenedStatus = lead.status;
+      saleExitDecision = "";
       $("#leadModalEyebrow").textContent = "LEAD · " + lead.status.toUpperCase();
       updateSaleSectionVisibility();
-    } else {
-      lead[field[0]] = input.value.trim();
-      updateSaleSnapshot(lead);
     }
+    if (pendingSingleField !== "leadStatus") {
+      lead[field[0]] = input.value.trim();
+    }
+    updateSaleSnapshot(lead);
     saveState();
     renderLeads();
     renderAgenda();
@@ -1804,8 +1844,14 @@
       showToast("Preencha ao menos um dado do lead para salvar.");
       return;
     }
+    const statusChanged = current && leadOpenedStatus === SOLD_STATUS && $("#leadStatus").value !== SOLD_STATUS && Boolean(saleForLead(current.id));
+    if (statusChanged && !ensureSaleExitDecision()) {
+      showToast("Escolha o que fazer com a venda registrada antes de salvar.");
+      return;
+    }
     const result = finalizeLeadStatus(lead, !current, $("#leadStatus").value, { value: $("#leadSaleValue").value, date: $("#leadSaleDate").value, notes: $("#leadSaleNotes").value });
     if (result.error) { showToast(result.error); $("#leadSaleValue").focus(); return; }
+    saleExitDecision = "";
     if (current) {
       state.leads = state.leads.map(function (item) { return item.id === id ? lead : item; });
       showToast("Lead atualizado.");
