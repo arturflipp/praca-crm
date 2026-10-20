@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=23">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=22" defer></script>
+  <script src="app.js?v=23" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -223,16 +223,26 @@
           </div>
         </section>
         <section class="form-section hidden" id="leadSaleSection">
-          <div class="form-section-title">Dados da venda</div>
-          <div class="form-grid two-col">
-            <label>Valor da venda (R$)<input id="leadSaleValue" inputmode="decimal" placeholder="Ex.: 1.500,00"></label>
-            <label>Data da venda<input id="leadSaleDate" type="date"></label>
-            <label class="span-two">Observação da venda<input id="leadSaleNotes" placeholder="Ex.: pagou metade na entrega"></label>
+          <div class="form-section-title">Vendas deste cliente</div>
+          <div class="sale-list" id="leadSaleList"></div>
+          <div class="sale-add-wrap">
+            <button class="text-button" type="button" id="toggleAddSale">＋ Adicionar venda</button>
+            <div class="sale-add-fields hidden" id="leadSaleAddFields">
+              <div class="form-grid two-col">
+                <label>Valor da venda (R$)<input id="leadSaleValue" inputmode="decimal" placeholder="Ex.: 1.500,00"></label>
+                <label>Data da venda<input id="leadSaleDate" type="date"></label>
+                <label class="span-two">Observação da venda<input id="leadSaleNotes" placeholder="Ex.: pagou metade na entrega"></label>
+              </div>
+              <div class="sale-add-actions">
+                <button class="button button-secondary" type="button" id="cancelAddSale">Cancelar</button>
+                <button class="button button-primary" type="button" id="confirmAddSale">Salvar venda</button>
+              </div>
+            </div>
           </div>
           <p class="report-value-help" id="leadSaleHint">O valor e a data alimentam a aba Relatórios.</p>
         </section>
         <section class="form-section hidden" id="leadSaleExitSection">
-          <div class="form-section-title">Venda registrada</div>
+          <div class="form-section-title">Vendas registradas</div>
           <p class="report-value-help" id="leadSaleExitHint">Este lead está com uma venda registrada. Ao mudar o status para algo que não seja Vendido, escolha o que fazer com ela:</p>
           <div class="sale-exit-actions">
             <button class="button button-secondary" type="button" id="keepSaleOnExit">Manter no histórico</button>

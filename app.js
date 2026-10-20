@@ -666,12 +666,23 @@
     if (typeof cents !== "number" || !Number.isFinite(cents)) return "";
     return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
   }
-  function saleForLead(leadId) {
-    return state.sales.find(function (sale) { return sale.leadId === leadId; }) || null;
+  function salesForLead(leadId) {
+    return state.sales.filter(function (sale) { return sale.leadId === leadId; });
   }
-  function upsertSaleForLead(lead, fields) {
-    let sale = saleForLead(lead.id);
-    if (!sale) { sale = buildSale(lead, {}); state.sales.push(sale); }
+  function saleForLead(leadId) {
+    const list = salesForLead(leadId);
+    if (!list.length) return null;
+    return list.slice().sort(function (a, b) {
+      return String(b.soldAt || "").localeCompare(String(a.soldAt || "")) || (Date.parse(b.updatedAt || "") || 0) - (Date.parse(a.updatedAt || "") || 0);
+    })[0];
+  }
+  function createSaleForLead(lead, fields) {
+    const sale = buildSale(lead, {});
+    applySaleFields(sale, lead, fields);
+    state.sales.push(sale);
+    return sale;
+  }
+  function applySaleFields(sale, lead, fields) {
     sale.leadId = lead.id;
     sale.leadName = lead.name || sale.leadName || "Comércio sem nome";
     sale.category = lead.category || "";
@@ -684,17 +695,25 @@
     sale.updatedAt = new Date().toISOString();
     return sale;
   }
+  function upsertSaleForLead(lead, fields) {
+    const sale = saleForLead(lead.id);
+    if (!sale) return createSaleForLead(lead, fields);
+    return applySaleFields(sale, lead, fields);
+  }
   function removeSaleForLead(leadId) {
     state.sales = state.sales.filter(function (sale) { return sale.leadId !== leadId; });
   }
+  function removeSaleById(saleId) {
+    state.sales = state.sales.filter(function (sale) { return sale.id !== saleId; });
+  }
   function updateSaleSnapshot(lead) {
-    const sale = saleForLead(lead.id);
-    if (!sale) return;
-    sale.leadName = lead.name || sale.leadName;
-    sale.category = lead.category || "";
-    sale.location = lead.location || "";
-    sale.source = lead.source || "";
-    sale.updatedAt = new Date().toISOString();
+    salesForLead(lead.id).forEach(function (sale) {
+      sale.leadName = lead.name || sale.leadName;
+      sale.category = lead.category || "";
+      sale.location = lead.location || "";
+      sale.source = lead.source || "";
+      sale.updatedAt = new Date().toISOString();
+    });
   }
   function recordStatusChange(lead, from, to) {
     if (!lead || from === to) return;
@@ -705,9 +724,12 @@
     const previous = isNew ? "" : (STATUSES.includes(lead.status) ? lead.status : "Novo");
     next = STATUSES.includes(next) ? next : "Novo";
     if (next === SOLD_STATUS) {
-      const cents = currencyToCents(saleFields.value);
-      if (cents === null || cents <= 0) return { error: "Informe o valor da venda para marcar como Vendido." };
-      upsertSaleForLead(lead, { valueCents: cents, soldAt: saleFields.date || localDateValue(), notes: saleFields.notes || "" });
+      const existing = salesForLead(lead.id);
+      if (!existing.length) {
+        const cents = currencyToCents(saleFields.value);
+        if (cents === null || cents <= 0) return { error: "Adicione o valor da venda para marcar como Vendido.", needValue: true };
+        createSaleForLead(lead, { valueCents: cents, soldAt: saleFields.date || localDateValue(), notes: saleFields.notes || "" });
+      }
     } else if (!isNew && previous === SOLD_STATUS) {
       if (saleExitDecision === "keep") updateSaleSnapshot(lead);
       else removeSaleForLead(lead.id);
@@ -959,10 +981,8 @@
     $("#leadStatus").value = STATUSES.includes(lead.status) ? lead.status : "Novo";
     $("#leadMessage").value = lead.message || "";
     $("#leadNotes").value = lead.notes || "";
-    const sale = saleForLead(lead.id);
-    $("#leadSaleValue").value = sale && typeof sale.valueCents === "number" && sale.valueCents > 0 ? formatCurrencyInput(sale.valueCents) : "";
-    $("#leadSaleDate").value = (sale && sale.soldAt) || localDateValue();
-    $("#leadSaleNotes").value = (sale && sale.notes) || "";
+    resetAddSaleForm();
+    renderLeadSaleList(lead.id);
     $("#deleteLead").classList.remove("hidden");
     $("#addReminderForLead").classList.remove("hidden");
     $("#saveSingleField").classList.remove("hidden");
@@ -971,6 +991,35 @@
     updateLeadActions(lead);
     leadDialog.showModal();
   }
+  function resetAddSaleForm() {
+    $("#leadSaleValue").value = "";
+    $("#leadSaleDate").value = localDateValue();
+    $("#leadSaleNotes").value = "";
+    const fields = $("#leadSaleAddFields");
+    if (fields) fields.classList.add("hidden");
+  }
+  function renderLeadSaleList(leadId) {
+    const container = $("#leadSaleList");
+    if (!container) return;
+    const sales = salesForLead(leadId).slice().sort(function (a, b) {
+      return String(b.soldAt || "").localeCompare(String(a.soldAt || "")) || (Date.parse(b.updatedAt || "") || 0) - (Date.parse(a.updatedAt || "") || 0);
+    });
+    if (!sales.length) {
+      container.innerHTML = '<p class="empty-small">Nenhuma venda registrada. Use “Adicionar venda” abaixo.</p>';
+      return;
+    }
+    container.innerHTML = sales.map(function (sale) {
+      const value = typeof sale.valueCents === "number" && sale.valueCents > 0 ? escapeHtml(formatCurrency(sale.valueCents)) : '<span class="report-value-pending">valor pendente</span>';
+      const date = sale.soldAt ? formatDate(sale.soldAt, { day: "2-digit", month: "short", year: "numeric" }) : "sem data";
+      const notes = sale.notes ? '<small class="sale-item-notes">' + escapeHtml(sale.notes) + '</small>' : "";
+      return '<div class="sale-item">' +
+        '<div class="sale-item-main"><strong>' + value + '</strong><small>' + escapeHtml(date) + '</small>' + notes + '</div>' +
+        '<button class="icon-button icon-button-danger" type="button" data-remove-sale="' + escapeHtml(sale.id) + '" aria-label="Excluir esta venda" title="Excluir esta venda">' +
+          '<svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4m2.2 0-.6 9.2a1 1 0 0 1-1 .9H5.4a1 1 0 0 1-1-.9L3.8 4m2.7 2.2v5m3-5v5"/></svg>' +
+        '</button>' +
+      '</div>';
+    }).join("");
+  }
   function updateSaleSectionVisibility() {
     const section = $("#leadSaleSection");
     if (!section) return;
@@ -978,18 +1027,25 @@
     const selected = $("#leadStatus").value;
     const sold = selected === SOLD_STATUS;
     section.classList.toggle("hidden", !sold);
+    if (id) renderLeadSaleList(id);
     const hint = $("#leadSaleHint");
     if (hint) {
-      const sale = id ? saleForLead(id) : null;
-      const pending = sold && (!sale || !(typeof sale.valueCents === "number" && sale.valueCents > 0));
-      hint.textContent = pending ? "Venda sem valor informado: preencha o valor para aparecer nos relatórios." : "O valor e a data alimentam a aba Relatórios.";
+      const sales = id ? salesForLead(id) : [];
+      const pending = sold && (!sales.length || sales.some(function (sale) { return !(typeof sale.valueCents === "number" && sale.valueCents > 0); }));
+      hint.textContent = pending ? "Informe o valor de cada venda para ela aparecer nos relatórios." : "Cada venda fica registrada e alimenta a aba Relatórios.";
       hint.classList.toggle("report-value-pending", pending);
     }
     const exit = $("#leadSaleExitSection");
     if (exit) {
-      const hadSale = Boolean(id && saleForLead(id));
-      const leavingSold = Boolean(id) && leadOpenedStatus === SOLD_STATUS && !sold && hadSale;
+      const sales = id ? salesForLead(id) : [];
+      const leavingSold = Boolean(id) && leadOpenedStatus === SOLD_STATUS && !sold && sales.length > 0;
       exit.classList.toggle("hidden", !leavingSold);
+      if (leavingSold) {
+        const hint = $("#leadSaleExitHint");
+        if (hint) hint.textContent = sales.length > 1
+          ? "Este cliente tem " + sales.length + " vendas registradas. Ao mudar o status para algo que não seja Vendido, escolha o que fazer com todas elas:"
+          : "Este lead está com uma venda registrada. Ao mudar o status para algo que não seja Vendido, escolha o que fazer com ela:";
+      }
       if (!leavingSold) saleExitDecision = "";
     }
   }
@@ -998,6 +1054,13 @@
     const exit = $("#leadSaleExitSection");
     if (exit) exit.classList.remove("hidden");
     return false;
+  }
+  function handleSaleError(result) {
+    showToast(result.error);
+    const fields = $("#leadSaleAddFields");
+    if (result.needValue && fields) fields.classList.remove("hidden");
+    if (result.needValue && $("#leadSaleDate") && !$("#leadSaleDate").value) $("#leadSaleDate").value = localDateValue();
+    $("#leadSaleValue").focus();
   }
   function resetLeadDialog() {
     $("#leadForm").reset();
@@ -1013,9 +1076,9 @@
     $("#leadWhatsApp").classList.add("hidden");
     $("#leadGoogleProfile").classList.add("hidden");
     $("#saveSingleField").classList.add("hidden");
-    $("#leadSaleValue").value = "";
-    $("#leadSaleDate").value = localDateValue();
-    $("#leadSaleNotes").value = "";
+    resetAddSaleForm();
+    const list = $("#leadSaleList");
+    if (list) list.innerHTML = "";
     resetSingleFieldSave();
     updateSaleSectionVisibility();
   }
@@ -1766,6 +1829,42 @@
     $("#leadSaleExitSection").classList.add("hidden");
     showToast("Venda será excluída ao salvar.");
   });
+  $("#toggleAddSale").addEventListener("click", function () {
+    const fields = $("#leadSaleAddFields");
+    const opening = fields.classList.contains("hidden");
+    fields.classList.toggle("hidden", !opening);
+    if (opening) { $("#leadSaleDate").value = localDateValue(); $("#leadSaleValue").focus(); }
+  });
+  $("#cancelAddSale").addEventListener("click", resetAddSaleForm);
+  $("#confirmAddSale").addEventListener("click", function () {
+    const id = $("#leadId").value;
+    const lead = state.leads.find(function (item) { return item.id === id; });
+    if (!lead) return;
+    const cents = currencyToCents($("#leadSaleValue").value);
+    if (cents === null || cents <= 0) { showToast("Informe o valor da venda."); $("#leadSaleValue").focus(); return; }
+    createSaleForLead(lead, { valueCents: cents, soldAt: $("#leadSaleDate").value || localDateValue(), notes: $("#leadSaleNotes").value || "" });
+    saveState();
+    resetAddSaleForm();
+    renderLeadSaleList(id);
+    updateSaleSectionVisibility();
+    renderReports();
+    renderLeads();
+    showToast("Venda adicionada ao histórico.");
+  });
+  $("#leadSaleList").addEventListener("click", function (event) {
+    const button = event.target.closest("[data-remove-sale]");
+    if (!button) return;
+    const saleId = button.dataset.removeSale;
+    if (!window.confirm("Excluir esta venda do histórico de relatórios?")) return;
+    removeSaleById(saleId);
+    saveState();
+    const id = $("#leadId").value;
+    renderLeadSaleList(id);
+    updateSaleSectionVisibility();
+    renderReports();
+    renderLeads();
+    showToast("Venda excluída do histórico.");
+  });
   $("#leadSaleValue").addEventListener("blur", function () {
     if (!this.value.trim()) return;
     const cents = currencyToCents(this.value);
@@ -1799,14 +1898,14 @@
     const lead = state.leads.find(function (item) { return item.id === id; });
     if (!lead || !field) return;
     const input = $("#" + pendingSingleField);
-    const statusChanged = leadOpenedStatus === SOLD_STATUS && $("#leadStatus").value !== SOLD_STATUS && Boolean(saleForLead(lead.id));
+    const statusChanged = leadOpenedStatus === SOLD_STATUS && $("#leadStatus").value !== SOLD_STATUS && salesForLead(lead.id).length > 0;
     if (statusChanged && !ensureSaleExitDecision()) {
       showToast("Escolha o que fazer com a venda registrada antes de salvar.");
       return;
     }
     if (pendingSingleField === "leadStatus" || statusChanged) {
       const result = finalizeLeadStatus(lead, false, $("#leadStatus").value, { value: $("#leadSaleValue").value, date: $("#leadSaleDate").value, notes: $("#leadSaleNotes").value });
-      if (result.error) { showToast(result.error); $("#leadSaleValue").focus(); return; }
+      if (result.error) { handleSaleError(result); return; }
       leadOpenedStatus = lead.status;
       saleExitDecision = "";
       $("#leadModalEyebrow").textContent = "LEAD · " + lead.status.toUpperCase();
@@ -1844,13 +1943,13 @@
       showToast("Preencha ao menos um dado do lead para salvar.");
       return;
     }
-    const statusChanged = current && leadOpenedStatus === SOLD_STATUS && $("#leadStatus").value !== SOLD_STATUS && Boolean(saleForLead(current.id));
+    const statusChanged = current && leadOpenedStatus === SOLD_STATUS && $("#leadStatus").value !== SOLD_STATUS && salesForLead(current.id).length > 0;
     if (statusChanged && !ensureSaleExitDecision()) {
       showToast("Escolha o que fazer com a venda registrada antes de salvar.");
       return;
     }
     const result = finalizeLeadStatus(lead, !current, $("#leadStatus").value, { value: $("#leadSaleValue").value, date: $("#leadSaleDate").value, notes: $("#leadSaleNotes").value });
-    if (result.error) { showToast(result.error); $("#leadSaleValue").focus(); return; }
+    if (result.error) { handleSaleError(result); return; }
     saleExitDecision = "";
     if (current) {
       state.leads = state.leads.map(function (item) { return item.id === id ? lead : item; });
