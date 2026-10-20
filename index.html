@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=23">
+  <link rel="stylesheet" href="styles.css?v=24">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=23" defer></script>
+  <script src="app.js?v=24" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -250,9 +250,19 @@
           </div>
         </section>
         <section class="form-section">
-          <div class="form-section-title">Mensagem e observações</div>
+          <div class="form-section-title">Script e observações</div>
           <div class="form-grid">
-            <label>Mensagem sugerida<textarea id="leadMessage" rows="3" placeholder="Mensagem que você pretende usar"></textarea></label>
+            <div class="script-wrapper" id="leadScriptBlock">
+              <div class="script-editor-head">
+                <span class="section-label">SCRIPT DO CLIENTE</span>
+                <div class="script-editor-actions">
+                  <button class="text-button" type="button" id="copyLeadScript">Copiar script completo</button>
+                  <button class="text-button" type="button" id="addScriptStep">＋ Adicionar etapa</button>
+                </div>
+              </div>
+              <p class="script-editor-help">Todo o atendimento personalizado deste lead, etapa por etapa. Copie cada mensagem para enviar no WhatsApp; a 1ª etapa abre no botão “Abrir WhatsApp”.</p>
+              <div id="leadScriptSteps" class="script-steps"></div>
+            </div>
             <label>Observações sobre a conversa ou venda<textarea id="leadNotes" rows="4" placeholder="Ex.: prefere visita à tarde; pediu para falar após o dia 20; negociar kit de balcão."></textarea></label>
           </div>
         </section>

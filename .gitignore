@@ -3,3 +3,7 @@
 .DS_Store
 supabase/.temp/
 supabase/.branches/
+
+# Flores decorativas (locais)
+flor.png
+flor.svg

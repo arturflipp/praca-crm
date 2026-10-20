@@ -30,28 +30,46 @@
     ["avaliacoes", "Mais avaliações"],
     ["gap", "Maior gap de avaliações"]
   ];
-  const messageRule = "- Uma única mensagem de abertura para WhatsApp, em português, curta, natural e pronta para enviar. Siga este modelo, adaptando apenas dados confirmados: \"Oi, tudo bem? Encontrei a {comércio} no Google e vi nota {nota} com {avaliações} avaliações; a {concorrente}, da mesma região e categoria, aparece com {avaliações do concorrente}. Trabalho com placas NFC/QR para facilitar avaliações: vocês já têm algum processo para convidar clientes satisfeitos a avaliar?\" Faça somente essa versão e uma pergunta. Se não houver comparação local confirmada, retire apenas o trecho do concorrente. Não invente elogios ou fatos, não finja ser cliente e não afirme que a diferença de avaliações causa perda de clientes ou pior posição no Google.";
+  const scriptStepsModel = [
+    ["Primeira mensagem", "Oi, tudo bem? Vi o perfil da [nome do estabelecimento] no Google e achei o trabalho de vocês incrível! [Elogio personalizado]. Vocês ainda estão atendendo por este número?"],
+    ["Apresentação da oportunidade", "Então, é porque eu trabalho com soluções para o Google e reparei que vocês estão com uma nota excelente, [nota] estrelas, mas ainda têm apenas [número] avaliações. Enquanto isso, outros [tipo de estabelecimento] aqui da região já estão com mais de [número] avaliações.\nE você sabe que hoje muita gente pesquisa no Google antes de escolher [o tipo de serviço ou estabelecimento], né? Um estabelecimento com mais avaliações pode transmitir mais confiança e ter uma vantagem na hora de conquistar clientes.\nAlém disso, a quantidade e a qualidade das avaliações contribuem para melhorar o posicionamento local no Google."],
+    ["Apresentação da plaquinha", "Pensando nisso, nós desenvolvemos uma plaquinha que permite que o cliente aproxime o celular ou escaneie o QR Code e vá direto para a página de avaliação de vocês.\nAssim, quando você termina um atendimento, uma venda ou presta um serviço e percebe que o cliente gostou da experiência, pode pedir uma avaliação ali mesmo. Como o processo fica mais simples, a pessoa demora alguns segundos para escanear e fazer a avaliação, você aumenta as chances de conseguir mais avaliações, melhorando seu posicionamento do Google e atraindo mais clientes ao longo do tempo de forma orgânica.\n\nVou te mandar um vídeo rapidinho para você ver como ela funciona na prática, beleza?\n\n✅ Vantagens da plaquinha de avaliação do Google:\n📌 Praticidade: o cliente aproxima o celular ou escaneia o QR Code e vai direto para a página de avaliação.\n⭐ Mais avaliações: facilita o processo e incentiva mais clientes a compartilharem suas experiências.\n📍 Mais visibilidade: mais avaliações autênticas podem contribuir para melhorar o posicionamento local e ajudar mais pessoas a conhecerem seu negócio.\n🔧 Pronta para usar: já vai configurada para o perfil da sua empresa.\n💰 Sem mensalidade: você paga uma única vez, e a plaquinha é sua!\n🤝 Pagamento na entrega: você recebe a plaquinha pronta e paga na hora."],
+    ["Caso a pessoa pergunte o preço", "Então, a plaquinha fica R$ 80, já configurada e pronta para usar, sem mensalidade nenhuma. Mas, pagando no Pix ou em dinheiro, consigo fazer por R$ 70 pra vocês. Também aceitamos cartão de crédito e débito, com parcelamento em até duas vezes. E você só paga na entrega! Se quiser, posso passar aí ainda hoje, configurar tudo e já deixar prontinha pra vocês usarem. O que acha?"],
+    ["Caso a pessoa não pergunte o preço", "Então, a plaquinha fica R$ 80, já configurada e pronta para usar, sem mensalidade nenhuma. Mas, pagando no Pix ou em dinheiro, consigo fazer por R$ 70 pra vocês. Também aceitamos cartão de crédito e débito, com parcelamento em até duas vezes. E você só paga na entrega! Se quiser, posso passar aí ainda hoje, configurar tudo e já deixar prontinha pra vocês usarem. O que acha?"]
+  ];
+  const SCRIPT_STEP_TITLES = scriptStepsModel.map(function (step) { return step[0]; });
+  const scriptModelText = scriptStepsModel.map(function (step, index) {
+    const body = step[1].replace(/\n+/g, function (breaks) { return breaks.length > 1 ? " ⏎⏎ " : " ⏎ "; });
+    return (index + 1) + ". " + step[0] + ": " + body;
+  }).join(" ### ");
+  const scriptRule = [
+    "- Em vez de uma única mensagem de abertura, escreva o script COMPLETO de atendimento: são 5 mensagens de WhatsApp, nesta ordem, seguindo o modelo abaixo palavra por palavra. Adapte APENAS o que está entre colchetes, com os dados confirmados de cada comércio: [nome do estabelecimento], [Elogio personalizado], [nota], [número] de avaliações, [tipo de estabelecimento], [o tipo de serviço ou estabelecimento]. Não resuma, não reescreva e não \"melhore\" nenhuma outra frase; mantenha preços, emojis e pontuação exatamente como estão. Se faltar nota ou número de avaliações, adapte a frase para ficar natural sem inventar o valor.",
+    "Para [Elogio personalizado], use um elogio curto e verdadeiro com base no que os clientes elogiam nas avaliações do comércio; se nada específico aparecer nos dados encontrados, retire os colchetes e deixe apenas o elogio que o modelo já traz.",
+    "As linhas \"[ENVIAR O VÍDEO JUNTAMENTE COM A DESCRIÇÃO ABAIXO]\" e \"Follow-up alguns minutos depois.\" do modelo são instruções de envio para mim: NÃO coloque essas linhas dentro do texto das mensagens.",
+    "Formato da célula Script: uma única linha na tabela. Separe as 5 mensagens com \" ### \", cada uma começando pelo número e o título com dois pontos, exatamente nesta ordem: \"1. Primeira mensagem:\", \"2. Apresentação da oportunidade:\", \"3. Apresentação da plaquinha:\", \"4. Caso a pessoa pergunte o preço:\", \"5. Caso a pessoa não pergunte o preço:\". Onde o modelo pula linha, escreva \" ⏎ \" (uma quebra) ou \" ⏎⏎ \" (linha em branco). Nunca use o caractere | dentro do script e nunca quebre a linha da célula.",
+    "Modelo:",
+    scriptModelText
+  ].join("\n");
   const defaultPrompt = [
     "Você é meu assistente de prospecção. Eu vendo placas NFC/QR que facilitam o cliente deixar avaliação no Google para comércios locais.",
     "",
-    "Use a busca na web. Busque até 30 comércios REAIS da categoria [CATEGORIA] em [BAIRRO, CIDADE]. Priorize dados completos e verificados; não complete a quantidade com negócios ou informações duvidosas.",
+    "Use a busca na web. Busque [CATEGORIA] em [BAIRRO, CIDADE]. Traga de 20 a 30 comércios REAIS que tenham perfil no Google.",
     "",
     "Para cada comércio, encontre:",
     "- Nome",
     "- Telefone/WhatsApp (só os dígitos com DDD, ex: 13999990000; se não achar, escreva \"não encontrado\")",
-    "- Link direto da ficha pública desse comércio no Google Maps (abra o resultado do estabelecimento e copie a URL; não use uma busca genérica e nunca invente o link; se não encontrar, escreva \"não encontrado\")",
+    "- Link direto da ficha pública desse comércio no Google Maps (use a URL da ficha do estabelecimento; não use uma busca genérica nem invente o link; se não encontrar, escreva \"não encontrado\")",
     "- Número de avaliações no Google",
     "- Nota média",
-    "- O concorrente direto mais avaliado entre os negócios comparáveis e próximos, da mesma categoria e região, e o número de avaliações exibido na ficha dele",
-    "",
-    messageRule,
+    "- O concorrente direto MAIS avaliado da mesma categoria e região, e o número de avaliações dele",
+    scriptRule,
     "",
     "ENTREGUE SOMENTE uma tabela markdown, sem texto antes ou depois, com exatamente estas colunas nesta ordem:",
-    "| Comércio | Telefone | Link do Google | Avaliações | Nota | Concorrente | Avaliações do concorrente | Mensagem |",
+    "| Comércio | Telefone | Link do Google | Avaliações | Nota | Concorrente | Avaliações do concorrente | Script |",
     "",
     "Ordene do maior para o menor gap (diferença entre as avaliações do concorrente e as do comércio). Os melhores leads são os que têm claramente menos avaliações que um concorrente próximo.",
     "",
-    "Regras de pesquisa: confira nome, telefone, nota e avaliações na ficha individual do Google Maps. Escolha concorrente da mesma categoria e região e confira a ficha e a contagem dele; não reutilize um concorrente sem confirmar que é uma comparação local adequada. Não presuma que um telefone aceita WhatsApp. Use somente dados encontrados; nunca invente números, nomes, elogios ou links. Se faltar dado, escreva \"não encontrado\"."
+    "Regras: use só dados que você encontrou na busca. Nunca invente número, telefone ou nome. Se não achar algum dado, escreva \"não encontrado\" na célula."
   ].join("\n");
 
   function promptTemplate(text, category, location) {
@@ -65,7 +83,7 @@
     ["Papel e oferta", "Define quem a IA deve representar e qual é seu produto ou serviço."],
     ["Busca e quantidade", "Define a categoria, a região e quantos comércios procurar."],
     ["Dados de cada comércio", "Escolhe os campos que a pesquisa deve levantar para cada lead."],
-    ["Mensagem de abordagem", "Define o texto e o tom da única mensagem sugerida para WhatsApp."],
+    ["Script de abordagem", "Define o script completo de WhatsApp que a IA escreve para cada comércio, as 5 mensagens, seguindo seu modelo."],
     ["Formato da resposta", "Define como a IA entrega os dados para colar no CRM."],
     ["Prioridade dos leads", "Define como comparar e ordenar as oportunidades."],
     ["Regras de verificação", "Define o que precisa ser confirmado e o que fazer quando faltar dado."]
@@ -88,9 +106,94 @@
     if (!date || isNaN(date.getTime())) return "";
     return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
   }
+  const SCRIPT_STEP_NOTES = {
+    "Apresentação da plaquinha": "enviar o vídeo junto com esta mensagem",
+    "Caso a pessoa não pergunte o preço": "enviar alguns minutos depois, se não receber resposta"
+  };
+  function normalizeScriptSteps(steps) {
+    const clean = (Array.isArray(steps) ? steps : []).filter(function (step) {
+      return step && typeof step === "object" && String(step.text || "").trim();
+    }).map(function (step) {
+      return { num: 0, title: String(step.title || "").trim() || "Mensagem", text: String(step.text || "").trim(), note: String(step.note || "").trim() };
+    });
+    return clean.map(function (step, index) {
+      step.num = index + 1;
+      return step;
+    });
+  }
+  function scriptStepFromText(index, rawText, title) {
+    let text = String(rawText || "").trim();
+    let note = SCRIPT_STEP_NOTES[title] || "";
+    const noteMatch = text.match(/^Nota:\s*([^.!?:]+[.!?:])\s*([\s\S]+)$/i);
+    if (noteMatch) {
+      note = noteMatch[1].trim();
+      text = noteMatch[2].trim();
+    }
+    return { num: index + 1, title: title || SCRIPT_STEP_TITLES[index] || ("Mensagem " + (index + 1)), text: text, note: note };
+  }
+  const SCRIPT_CELL_SPLIT = /\s*###\s*|\s*\|\|\|\s*/;
+  const SCRIPT_BLOCK_TITLE = /^(?:(\d{1,2})\s*[.)]\s*)?([^:]{2,60}):\s*([\s\S]*)$/;
+  function parseScriptCell(cell) {
+    const blocks = String(cell || "").split(SCRIPT_CELL_SPLIT).map(function (part) {
+      return part.replace(/\s*⏎⏎\s*/g, "\n\n").replace(/\s*⏎\s*/g, "\n").replace(/<br\s*\/?\s*>/gi, "\n").trim();
+    }).filter(Boolean);
+    if (!blocks.length) return [];
+    return blocks.map(function (block, index) {
+      const match = block.match(SCRIPT_BLOCK_TITLE);
+      const title = match ? match[2].trim() : "";
+      const text = match ? match[3].trim() : block;
+      return scriptStepFromText(index, text, title || undefined);
+    });
+  }
+  function scriptStepsText(value) {
+    if (typeof value === "string") return value;
+    return normalizeScriptSteps(value).map(function (step) {
+      return (step.title ? step.title + ": " : "") + step.text;
+    }).join("\n\n");
+  }
+  function scriptFromMessage(message) {
+    return [scriptStepFromText(0, message, SCRIPT_STEP_TITLES[0])];
+  }
+  function fillScriptText(text, lead) {
+    const name = String(lead.name || "").trim();
+    const category = String(lead.category || "").trim();
+    const rating = String(lead.rating || "").trim();
+    const reviews = String(lead.reviews || "").trim();
+    const competitorReviews = String(lead.competitorReviews || "").trim();
+    let out = String(text || "");
+    if (competitorReviews) {
+      const tipo = category ? "negócios de " + category : "estabelecimentos";
+      out = out.replace(/outros \[tipo de estabelecimento\] aqui da região já estão com mais de \[número\] avaliações/g, "outros " + tipo + " aqui da região já estão com mais de " + competitorReviews + " avaliações");
+    }
+    if (name) out = out.replace(/\[nome do estabelecimento\]/g, name);
+    if (rating) out = out.replace(/\[nota\]/g, rating);
+    else out = out.replace(/,\s*\[nota\] estrelas/g, "");
+    if (reviews) out = out.replace(/apenas \[número\] avaliações/g, "apenas " + reviews + " avaliações");
+    if (category) {
+      out = out.replace(/\[o tipo de serviço ou estabelecimento\]/g, category);
+      out = out.replace(/\[tipo de estabelecimento\]/g, category);
+    } else {
+      out = out.replace(/\[tipo de estabelecimento\]/g, "estabelecimentos");
+      out = out.replace(/\[o tipo de serviço ou estabelecimento\]/g, "esse tipo de serviço");
+    }
+    if (!competitorReviews || !category) {
+      out = out.split("\n").filter(function (line) {
+        return !(line.indexOf("Enquanto isso") >= 0 && (line.indexOf("[tipo de estabelecimento]") >= 0 || line.indexOf("[número]") >= 0 || (line.indexOf("estabelecimentos") >= 0 && line.indexOf("mais de") >= 0)));
+      }).join("\n");
+    }
+    return out;
+  }
+  function defaultScriptFor(lead) {
+    return scriptStepsModel.map(function (step, index) {
+      return { num: index + 1, title: step[0], text: fillScriptText(step[1], lead), note: SCRIPT_STEP_NOTES[step[0]] || "" };
+    });
+  }
   function migrateLead(lead) {
     if (!lead || typeof lead !== "object") return lead;
     if (lead.status === LEGACY_SOLD_STATUS) lead.status = SOLD_STATUS;
+    if (!Array.isArray(lead.script) || !lead.script.length) lead.script = lead.message ? scriptFromMessage(lead.message) : defaultScriptFor(lead);
+    else lead.script = normalizeScriptSteps(lead.script);
+    lead.message = (lead.script[0] && lead.script[0].text) || "";
     const history = Array.isArray(lead.statusHistory) ? lead.statusHistory : [];
     if (!history.length) {
       const status = STATUSES.includes(lead.status) ? lead.status : "Novo";
@@ -123,11 +226,26 @@
     };
     return Object.assign(sale, extra || {});
   }
+  function migratePromptBlocks(blocks) {
+    return (Array.isArray(blocks) ? blocks : []).filter(Boolean).map(function (block) {
+      const text = String(block.text || "");
+      if (/Uma única mensagem de abertura|Faça somente essa versão/.test(text)) {
+        return Object.assign({}, block, { title: "Script de abordagem", help: promptBlockMeta[3] ? promptBlockMeta[3][1] : "", text: scriptRule });
+      }
+      if (/Uma mensagem de abertura de WhatsApp/.test(text)) {
+        const replaced = text.replace(/^[^\n]*Uma mensagem de abertura de WhatsApp[^\n]*$/m, function () { return scriptRule; });
+        return Object.assign({}, block, { title: "Script de abordagem", help: promptBlockMeta[3] ? promptBlockMeta[3][1] : "", text: replaced });
+      }
+      if (/\|\s*Mensagem\s*\|/.test(text)) return Object.assign({}, block, { text: text.replace(/\|\s*Mensagem\s*\|/, "| Script |") });
+      return block;
+    });
+  }
   function migrateState(data) {
     if (!data || typeof data !== "object") return data;
     const version = Number(data._schemaVersion) || 1;
     data.leads = Array.isArray(data.leads) ? data.leads.map(migrateLead) : [];
     data.sales = Array.isArray(data.sales) ? data.sales : [];
+    if (Array.isArray(data.promptBlocks)) data.promptBlocks = migratePromptBlocks(data.promptBlocks);
     if (version < SCHEMA_VERSION) {
       const known = {};
       data.sales.forEach(function (sale) { if (sale && sale.leadId) known[sale.leadId] = true; });
@@ -145,11 +263,8 @@
     try {
       const data = JSON.parse(localStorage.getItem(storageKey || STORAGE_KEY) || "null");
       if (data && typeof data.promptText === "string") {
-        data.promptText = data.promptText.replace(/^- O concorrente direto MAIS avaliado da mesma categoria e região, e o número de avaliações dele$/m, "- O concorrente direto mais avaliado entre os negócios comparáveis e próximos, da mesma categoria e região, e o número de avaliações exibido na ficha dele");
-        data.promptText = data.promptText.replace(/^Use a busca na web\. Busque .*?\. Traga de (?:12 a 20|20 a 30) comércios REAIS que tenham perfil no Google\.$/m, "Use a busca na web. Busque negócios da categoria [CATEGORIA] em [BAIRRO, CIDADE]. Traga até 30 comércios reais com ficha no Google Maps. Priorize dados verificados; se encontrar menos, não complete a lista com dados duvidosos.");
         if (data.promptText.includes("tom de cliente, não de vendedor")) {
-          data.promptText = data.promptText.replace(/^- Uma mensagem de abertura de WhatsApp[^\n]*$/m, messageRule);
-          data.promptText = data.promptText.replace(/^Regras: use só dados que você encontrou na busca\.[^\n]*$/m, "Regras de pesquisa: confira nome, telefone, nota e avaliações na ficha individual do Google Maps. Escolha concorrente da mesma categoria e região e confira a ficha e a contagem dele; não reutilize um concorrente sem confirmar que é uma comparação local adequada. Não presuma que um telefone aceita WhatsApp. Use somente dados encontrados; nunca invente números, nomes, elogios ou links. Se faltar dado, escreva \"não encontrado\".");
+          data.promptText = data.promptText.replace(/^- Uma mensagem de abertura de WhatsApp[^\n]*$/m, scriptRule);
         }
         data.promptText = data.promptText.replace(/\n+(- Uma única mensagem de abertura para WhatsApp)/g, "\n\n$1");
       }
@@ -163,7 +278,7 @@
       const promptLocation = data.promptLocation || "";
       const promptText = promptTemplate(data.promptText || defaultPrompt, promptCategory, promptLocation);
       const promptBlocks = Array.isArray(data.promptBlocks) && data.promptBlocks.length
-        ? data.promptBlocks.map(function (block, index) {
+        ? migratePromptBlocks(data.promptBlocks).map(function (block, index) {
           const meta = promptBlockMeta[index] || ["Instrução extra " + (index - promptBlockMeta.length + 1), "Edite esta parte adicional do comando."];
           return { title: block.title || meta[0], help: block.help || meta[1], text: String(block.text || "") };
         })
@@ -243,7 +358,7 @@
     leadLocation: ["location", "Região"], leadSource: ["source", "Origem"], leadReviews: ["reviews", "Avaliações"],
     leadRating: ["rating", "Nota"], leadCompetitor: ["competitor", "Concorrente"],
     leadCompetitorReviews: ["competitorReviews", "Avaliações do concorrente"], leadGoogleUrl: ["googleUrl", "Ficha do Google"],
-    leadStatus: ["status", "Status"], leadMessage: ["message", "Mensagem"], leadNotes: ["notes", "Observações"]
+    leadStatus: ["status", "Status"], leadNotes: ["notes", "Observações"]
   };
 
   function accountStorageKey(userId) { return USER_STATE_PREFIX + userId; }
@@ -293,6 +408,11 @@
   }
   function cloudState(data) {
     const source = data && typeof data === "object" ? data : {};
+    const before = JSON.stringify({
+      version: Number(source._schemaVersion) || 1,
+      leads: Array.isArray(source.leads) ? source.leads : [],
+      blocks: Array.isArray(source.promptBlocks) && source.promptBlocks.length ? source.promptBlocks.map(function (block) { return String(block.text || ""); }) : (typeof source.promptText === "string" ? source.promptText : defaultPrompt)
+    });
     const result = newState();
     result.promptCategory = typeof source.promptCategory === "string" ? source.promptCategory : "";
     result.promptLocation = typeof source.promptLocation === "string" ? source.promptLocation : "";
@@ -309,7 +429,13 @@
     result.sales = Array.isArray(source.sales) ? source.sales : [];
     result._promptUpdatedAt = typeof source._promptUpdatedAt === "string" ? source._promptUpdatedAt : "";
     result._schemaVersion = Number(source._schemaVersion) || 1;
-    return migrateState(result);
+    const migrated = migrateState(result);
+    if (JSON.stringify({
+      version: migrated._schemaVersion,
+      leads: migrated.leads,
+      blocks: migrated.promptBlocks.map(function (block) { return String(block.text || ""); })
+    }) !== before) migrated._migrateChanged = true;
+    return migrated;
   }
   function stampChangedRecords() {
     const now = new Date().toISOString();
@@ -432,9 +558,13 @@
           syncVersion += 1;
           meta.migratingLegacy = true;
         } else {
+          const migratedChanged = remoteState._migrateChanged === true;
+          delete remoteState._migrateChanged;
           state = remoteState;
-          syncDirty = false;
+          syncDirty = migratedChanged;
+          if (migratedChanged) syncVersion += 1;
         }
+        if (typeof state._migrateChanged !== "undefined") delete state._migrateChanged;
       } else if (cachedState) {
         state = cachedState;
         syncDirty = true;
@@ -510,6 +640,14 @@
       lastRemoteUpdatedAt = result.data.updated_at || "";
       lastStateSnapshot = JSON.parse(JSON.stringify(state));
       saveLocalSnapshot();
+      if (state._migrateChanged === true) {
+        delete state._migrateChanged;
+        syncDirty = true;
+        syncVersion += 1;
+        setSyncMeta({ dirty: true, localUpdatedAt: new Date().toISOString(), remoteUpdatedAt: lastRemoteUpdatedAt, migratingLegacy: false });
+        flushCloudSync();
+        return;
+      }
       setSyncMeta({ dirty: false, localUpdatedAt: lastRemoteUpdatedAt, remoteUpdatedAt: lastRemoteUpdatedAt, migratingLegacy: false });
       renderAll();
       setSyncState("synced", "Atualizado");
@@ -744,7 +882,7 @@
   }
   function leadPayloadHasData(lead) {
     const fields = [lead.name, lead.phone, lead.category, lead.location, lead.googleUrl, lead.reviews, lead.rating, lead.competitor, lead.competitorReviews, lead.message, lead.notes];
-    return fields.some(function (value) { return value && String(value).trim(); });
+    return fields.some(function (value) { return value && String(value).trim(); }) || (Array.isArray(lead.script) && lead.script.length > 0);
   }
   function showToast(message) {
     const toast = $("#toast");
@@ -865,11 +1003,16 @@
     button.title = collapsed ? "Abrir menu" : "Recolher menu";
     try { localStorage.setItem(SIDEBAR_KEY, String(collapsed)); } catch (_) {}
   }
+  function leadFirstMessage(lead) {
+    const steps = Array.isArray(lead && lead.script) ? lead.script : [];
+    const first = steps.find(function (step) { return step && String(step.text || "").trim(); });
+    return first ? String(first.text).trim() : String((lead && lead.message) || "").trim();
+  }
   function whatsappHref(lead) {
     const phone = digits(lead.phone);
     if (!phone) return "";
     const internationalPhone = phone.startsWith("55") ? phone : "55" + phone;
-    const message = String(lead.message || "").trim();
+    const message = leadFirstMessage(lead);
     return "https://wa.me/" + internationalPhone + (message ? "?text=" + encodeURIComponent(message) : "");
   }
   function googleProfileHref(value) {
@@ -954,6 +1097,69 @@
     if (googleHref) { googleButton.href = googleHref; googleButton.classList.remove("hidden"); }
     else googleButton.classList.add("hidden");
   }
+  let scriptEditorSteps = [];
+  function copyText(value, successMessage) {
+    const done = function () { showToast(successMessage); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(done, function () { fallbackCopy(value, successMessage); });
+      return;
+    }
+    fallbackCopy(value, successMessage);
+  }
+  function fallbackCopy(value, successMessage) {
+    const temporary = document.createElement("textarea");
+    temporary.value = value;
+    temporary.style.position = "fixed";
+    temporary.style.opacity = "0";
+    document.body.appendChild(temporary);
+    temporary.select();
+    const copied = document.execCommand("copy");
+    temporary.remove();
+    showToast(copied ? successMessage : "Não foi possível copiar.");
+  }
+  function renderScriptSteps() {
+    const container = $("#leadScriptSteps");
+    if (!container) return;
+    container.innerHTML = scriptEditorSteps.length ? scriptEditorSteps.map(function (step, index) {
+      return '<div class="script-step">' +
+        '<div class="script-step-head">' +
+          '<span class="script-step-num" aria-hidden="true">' + (index + 1) + '</span>' +
+          '<input class="script-step-title" data-script-title="' + index + '" value="' + escapeHtml(step.title || "") + '" placeholder="Título da etapa">' +
+          '<button class="icon-button" type="button" data-script-copy="' + index + '" aria-label="Copiar esta etapa" title="Copiar esta mensagem"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="9" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg></button>' +
+          '<button class="icon-button icon-button-danger" type="button" data-script-remove="' + index + '" aria-label="Excluir esta etapa" title="Excluir esta etapa"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4m2.2 0-.6 9.2a1 1 0 0 1-1 .9H5.4a1 1 0 0 1-1-.9L3.8 4m2.7 2.2v5m3-5v5"/></svg></button>' +
+        '</div>' +
+        '<textarea class="script-step-text" data-script-text="' + index + '" rows="4" placeholder="Texto desta etapa para enviar no WhatsApp">' + escapeHtml(step.text || "") + '</textarea>' +
+        '<input class="script-step-note" data-script-note="' + index + '" value="' + escapeHtml(step.note || "") + '" placeholder="Nota (não é enviada): ex. enviar junto o vídeo da plaquinha">' +
+      '</div>';
+    }).join("") : '<p class="empty-small">Sem etapas por enquanto. Use “Adicionar etapa” acima para escrever a primeira mensagem.</p>';
+  }
+  function collectScriptSteps() {
+    const steps = [];
+    $$("#leadScriptSteps .script-step").forEach(function (node) {
+      const textArea = node.querySelector("[data-script-text]");
+      const index = Number(textArea.dataset.scriptText);
+      const text = textArea.value.trim();
+      if (!text) return;
+      steps.push({
+        num: 0,
+        title: node.querySelector('[data-script-title="' + index + '"]').value.trim() || "Mensagem " + (steps.length + 1),
+        text: text,
+        note: (node.querySelector('[data-script-note="' + index + '"]') || {}).value || ""
+      });
+    });
+    return normalizeScriptSteps(steps);
+  }
+  function scriptFullCopyText(steps) {
+    return steps.map(function (step) {
+      return [step.num + ". " + step.title, step.note ? "(Nota: " + step.note + ")" : "", step.text].filter(Boolean).join("\n");
+    }).join("\n\n");
+  }
+  function startLeadScriptEditor(lead) {
+    scriptEditorSteps = lead && Array.isArray(lead.script) && lead.script.length
+      ? normalizeScriptSteps(lead.script).map(function (step) { return { num: step.num, title: step.title, text: step.text, note: step.note }; })
+      : [];
+    renderScriptSteps();
+  }
   function resetSingleFieldSave() {
     pendingSingleField = "";
     const button = $("#saveSingleField");
@@ -979,7 +1185,7 @@
     $("#leadCompetitorReviews").value = lead.competitorReviews || "";
     $("#leadGoogleUrl").value = lead.googleUrl || "";
     $("#leadStatus").value = STATUSES.includes(lead.status) ? lead.status : "Novo";
-    $("#leadMessage").value = lead.message || "";
+    startLeadScriptEditor(lead);
     $("#leadNotes").value = lead.notes || "";
     resetAddSaleForm();
     renderLeadSaleList(lead.id);
@@ -1080,6 +1286,8 @@
     const list = $("#leadSaleList");
     if (list) list.innerHTML = "";
     resetSingleFieldSave();
+    scriptEditorSteps = [];
+    renderScriptSteps();
     updateSaleSectionVisibility();
   }
   function openNewLead() {
@@ -1109,6 +1317,7 @@
   function isSeparatorRow(cells) {
     return cells.length > 0 && cells.every(function (cell) { return /^:?-{3,}:?$/.test(cell.replace(/\s/g, "")); });
   }
+  const NUMBER_MESSAGE_HEADERS = /^mensagem$/;
   function columnIndex(headers, kind) {
     const normalized = headers.map(normalize);
     const predicates = {
@@ -1120,6 +1329,7 @@
       googleUrl: function (h) { return h.includes("linkdogoogle") || h.includes("perfilnogoogle") || h.includes("googlemaps") || h.includes("urlperfilgoogle"); },
       rating: function (h) { return h === "nota" || h.includes("notamedia") || h === "avaliacao"; },
       message: function (h) { return h === "mensagem" || h.includes("mensagemdeabertura"); },
+      script: function (h) { return h === "script" || h.includes("scriptdeabordagem") || h.includes("scriptcompleto") || h.includes("scriptdoatendimento"); },
       location: function (h) { return h.includes("bairro") || h.includes("regiao") || h.includes("cidade"); },
       category: function (h) { return h === "categoria" || h.includes("tipodenegocio"); }
     };
@@ -1131,9 +1341,14 @@
     if (rows.length < 2) return { leads: [], error: "Não encontrei uma tabela Markdown. Confira se a resposta tem colunas separadas por |." };
     const headers = rows[0];
     const indexes = {};
-    ["name", "phone", "googleUrl", "reviews", "rating", "competitor", "competitorReviews", "message", "location", "category"].forEach(function (key) {
+    ["name", "phone", "googleUrl", "reviews", "rating", "competitor", "competitorReviews", "message", "script", "location", "category"].forEach(function (key) {
       indexes[key] = columnIndex(headers, key);
     });
+    const messageColumns = headers.map(function (header, index) {
+      const normalizedHeader = normalize(header).replace(/\d+$/, "");
+      const number = Number(String(header).replace(/\D/g, "")) || 0;
+      return NUMBER_MESSAGE_HEADERS.test(normalizedHeader) ? { index: index, number: number } : null;
+    }).filter(Boolean).sort(function (a, b) { return a.number - b.number; });
     if (indexes.name < 0) return { leads: [], error: "A tabela precisa ter uma coluna Comércio ou Nome." };
     if (indexes.reviews < 0) return { leads: [], error: "Não encontrei a coluna Avaliações." };
     const parsed = [];
@@ -1145,11 +1360,22 @@
       };
       const name = val("name");
       if (!meaningfulImportValue(name) || normalize(name) === "comercio") return;
+      let scriptSteps = parseScriptCell(val("script"));
+      if (!scriptSteps.length) {
+        const messageCells = messageColumns.map(function (column) { return (cells[column.index] || "").trim(); }).filter(function (value) { return value && !isMissingValue(value); });
+        if (messageCells.length === 1 && (messageCells[0].includes("###") || /^\s*\d+\s*[.)]/.test(messageCells[0]))) scriptSteps = parseScriptCell(messageCells[0]);
+        else scriptSteps = messageCells.map(function (value, index) { return scriptStepFromText(index, value); });
+      }
+      if (!scriptSteps.length) {
+        const single = val("message");
+        if (single && !isMissingValue(single)) scriptSteps = single.includes("###") ? parseScriptCell(single) : scriptFromMessage(single);
+      }
       parsed.push({
         id: uid(), name: name, phone: val("phone"), googleUrl: val("googleUrl"), category: val("category") || state.promptCategory,
         location: val("location") || state.promptLocation, reviews: val("reviews"), rating: val("rating"),
         competitor: val("competitor"), competitorReviews: val("competitorReviews"),
-        message: val("message"), notes: "", source: "Pesquisa online", status: "Novo",
+        message: (scriptSteps[0] && scriptSteps[0].text) || val("message"), notes: "", source: "Pesquisa online", status: "Novo",
+        script: scriptSteps,
         statusHistory: [{ at: new Date().toISOString(), from: "", to: "Novo" }],
         createdAt: new Date().toISOString()
       });
@@ -1211,7 +1437,7 @@
   const importFields = [
     ["name", "Nome"], ["phone", "Telefone"], ["googleUrl", "Ficha do Google"], ["category", "Categoria"],
     ["location", "Região"], ["reviews", "Avaliações"], ["rating", "Nota"], ["competitor", "Concorrente"],
-    ["competitorReviews", "Avaliações do concorrente"], ["message", "Mensagem"]
+    ["competitorReviews", "Avaliações do concorrente"], ["script", "Script"]
   ];
   function meaningfulImportValue(value) {
     return !isMissingValue(value);
@@ -1219,7 +1445,10 @@
   function importFieldEqual(key, a, b) {
     if (key === "phone") return duplicateKey({ phone: a }).phone === duplicateKey({ phone: b }).phone;
     if (key === "googleUrl") return normalizedProfileUrl(a) === normalizedProfileUrl(b);
-    return normalize(a) === normalize(b);
+    return normalize(key === "script" ? scriptStepsText(a) : a) === normalize(key === "script" ? scriptStepsText(b) : b);
+  }
+  function importFieldValue(record, key) {
+    return key === "script" ? scriptStepsText(record ? record.script : "") : record ? record[key] : "";
   }
   function findDuplicateTargets(incoming, pool, type) {
     return pool.map(function (lead) {
@@ -1235,8 +1464,8 @@
   function duplicateFieldChanges(incoming, target) {
     return importFields.filter(function (field) {
       const key = field[0];
-      const before = target[key];
-      const after = incoming[key];
+      const before = importFieldValue(target, key);
+      const after = importFieldValue(incoming, key);
       if (!meaningfulImportValue(after)) return false;
       return !meaningfulImportValue(before) || !importFieldEqual(key, before, after);
     });
@@ -1296,7 +1525,7 @@
       const changedFields = duplicateFieldChanges(incoming, chosen.lead);
       const sameFields = importFields.filter(function (field) {
         const key = field[0];
-        return meaningfulImportValue(incoming[key]) && meaningfulImportValue(chosen.lead[key]) && importFieldEqual(key, incoming[key], chosen.lead[key]);
+        return meaningfulImportValue(importFieldValue(incoming, key)) && meaningfulImportValue(importFieldValue(chosen.lead, key)) && importFieldEqual(key, importFieldValue(incoming, key), importFieldValue(chosen.lead, key));
       });
       const targetOptions = item.targets.map(function (target, targetIndex) {
         const selected = target.type === item.selectedType && target.id === item.selectedId;
@@ -1304,11 +1533,11 @@
         return '<label class="duplicate-target"><input type="radio" name="duplicate-target-' + index + '" data-duplicate-target="' + index + '" value="' + targetIndex + '"' + (selected ? " checked" : "") + '><span><strong>' + escapeHtml(label) + '</strong><small>' + escapeHtml(target.reasons.join(" · ")) + ' · ' + escapeHtml(duplicateStatus(target.lead)) + '</small></span></label>';
       }).join("");
       const differenceList = changedFields.length ? changedFields.map(function (field) {
-        const before = meaningfulImportValue(chosen.lead[field[0]]) ? chosen.lead[field[0]] : "(vazio)";
-        return '<span class="duplicate-field"><strong>' + escapeHtml(field[1]) + ':</strong> ' + escapeHtml(before) + ' <span aria-hidden="true">→</span> ' + escapeHtml(incoming[field[0]]) + '</span>';
+        const before = meaningfulImportValue(importFieldValue(chosen.lead, field[0])) ? importFieldValue(chosen.lead, field[0]) : "(vazio)";
+        return '<span class="duplicate-field"><strong>' + escapeHtml(field[1]) + ':</strong> ' + escapeHtml(before) + ' <span aria-hidden="true">→</span> ' + escapeHtml(importFieldValue(incoming, field[0])) + '</span>';
       }).join("") : '<span class="duplicate-field">Nenhum dado de pesquisa novo ou diferente.</span>';
       const equalMarkup = sameFields.length ? sameFields.map(function (field) {
-        return '<span class="duplicate-field"><strong>' + escapeHtml(field[1]) + ':</strong> ' + escapeHtml(chosen.lead[field[0]]) + '</span>';
+        return '<span class="duplicate-field"><strong>' + escapeHtml(field[1]) + ':</strong> ' + escapeHtml(importFieldValue(chosen.lead, field[0])) + '</span>';
       }).join("") : '<span class="duplicate-field">nenhum dado preenchido coincide</span>';
       return '<article class="duplicate-card"><div class="duplicate-card-heading"><div><strong>Importado: ' + escapeHtml(incoming.name || "Comércio sem nome") + '</strong><small>' + escapeHtml(incoming.phone || "Sem telefone informado") + '</small></div><span class="duplicate-match-badge">Possível duplicado</span></div>' +
         '<fieldset class="duplicate-targets"><legend>Escolha qual ficha comparar e, se quiser, atualizar</legend>' + targetOptions + '</fieldset>' +
@@ -1721,23 +1950,10 @@
     showToast("Prompt restaurado do histórico.");
     $("#promptEditor").focus();
   });
-  $("#copyPrompt").addEventListener("click", async function () {
+  $("#copyPrompt").addEventListener("click", function () {
     const ready = readyPrompt();
     rememberPrompt(ready);
-    try {
-      await navigator.clipboard.writeText(ready);
-      showToast("Prompt pronto copiado.");
-    } catch (_) {
-      const temporary = document.createElement("textarea");
-      temporary.value = ready;
-      temporary.style.position = "fixed";
-      temporary.style.opacity = "0";
-      document.body.appendChild(temporary);
-      temporary.select();
-      const copied = document.execCommand("copy");
-      temporary.remove();
-      showToast(copied ? "Prompt pronto copiado." : "Não foi possível copiar o prompt.");
-    }
+    copyText(ready, "Prompt pronto copiado.");
   });
   $("#restorePrompt").addEventListener("click", function () {
     if (!window.confirm("Restaurar o texto original do prompt?")) return;
@@ -1882,6 +2098,51 @@
     if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openLead(row.dataset.saleLead); }
   });
 
+  $("#leadScriptSteps").addEventListener("click", function (event) {
+    const copy = event.target.closest("[data-script-copy]");
+    if (copy) {
+      const text = copy.closest(".script-step").querySelector("[data-script-text]").value.trim();
+      if (!text) { showToast("Escreva o texto desta etapa antes de copiar."); return; }
+      copyText(text, "Etapa copiada. Cole no WhatsApp.");
+      return;
+    }
+    const remove = event.target.closest("[data-script-remove]");
+    if (remove) {
+      const target = Number(remove.dataset.scriptRemove);
+      const steps = [];
+      $$("#leadScriptSteps .script-step").forEach(function (node, index) {
+        if (index === target) return;
+        const textArea = node.querySelector("[data-script-text]");
+        const stepIndex = Number(textArea.dataset.scriptText);
+        const text = textArea.value.trim();
+        if (!text) return;
+        steps.push({
+          num: 0,
+          title: node.querySelector('[data-script-title="' + stepIndex + '"]').value.trim() || "Mensagem " + (steps.length + 1),
+          text: text,
+          note: (node.querySelector('[data-script-note="' + stepIndex + '"]') || {}).value || ""
+        });
+      });
+      scriptEditorSteps = normalizeScriptSteps(steps);
+      renderScriptSteps();
+    }
+  });
+  $("#addScriptStep").addEventListener("click", function () {
+    scriptEditorSteps = collectScriptSteps();
+    scriptEditorSteps.push({ num: 0, title: "", text: "", note: "" });
+    renderScriptSteps();
+    const nodes = $$("#leadScriptSteps .script-step");
+    const last = nodes[nodes.length - 1];
+    if (last) last.querySelector("[data-script-text]").focus();
+  });
+  $("#copyLeadScript").addEventListener("click", function () {
+    const steps = collectScriptSteps();
+    if (!steps.length) { showToast("Nenhuma etapa para copiar."); return; }
+    scriptEditorSteps = steps;
+    renderScriptSteps();
+    copyText(scriptFullCopyText(steps), "Script completo copiado.");
+  });
+
   function markSingleFieldChanged(event) {
     const field = singleFieldMap[event.target.id];
     if (!field || !$("#leadId").value) return;
@@ -1929,20 +2190,26 @@
     event.preventDefault();
     const id = $("#leadId").value;
     const current = id ? state.leads.find(function (lead) { return lead.id === id; }) : null;
+    const steps = collectScriptSteps();
     const lead = {
       id: id || uid(), name: $("#leadName").value.trim(), phone: $("#leadPhone").value.trim(),
       category: $("#leadCategory").value.trim(), location: $("#leadLocation").value.trim(),
       googleUrl: $("#leadGoogleUrl").value.trim(),
       source: $("#leadSource").value, reviews: $("#leadReviews").value.trim(), rating: $("#leadRating").value.trim(),
       competitor: $("#leadCompetitor").value.trim(), competitorReviews: $("#leadCompetitorReviews").value.trim(),
-      status: current ? current.status : "Novo", message: $("#leadMessage").value.trim(), notes: $("#leadNotes").value.trim(),
+      status: current ? current.status : "Novo", message: "", notes: $("#leadNotes").value.trim(),
+      script: steps,
       statusHistory: current && Array.isArray(current.statusHistory) ? current.statusHistory.slice() : [],
       createdAt: current ? current.createdAt : new Date().toISOString()
     };
-    if (!leadPayloadHasData(lead) && !$("#leadSaleValue").value.trim()) {
+    if (!leadPayloadHasData(Object.assign({}, lead, { script: steps })) && !$("#leadSaleValue").value.trim()) {
       showToast("Preencha ao menos um dado do lead para salvar.");
       return;
     }
+    if (steps.length) lead.script = steps;
+    else if (current) lead.script = Array.isArray(current.script) ? current.script : [];
+    else lead.script = defaultScriptFor(lead);
+    lead.message = leadFirstMessage(lead);
     const statusChanged = current && leadOpenedStatus === SOLD_STATUS && $("#leadStatus").value !== SOLD_STATUS && salesForLead(current.id).length > 0;
     if (statusChanged && !ensureSaleExitDecision()) {
       showToast("Escolha o que fazer com a venda registrada antes de salvar.");
