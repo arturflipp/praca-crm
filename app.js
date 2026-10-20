@@ -326,6 +326,7 @@
   let agendaFilter = "upcoming";
   let toastTimer;
   let pendingImport = null;
+  let existingDuplicateSelections = {};
   let pendingSingleField = "";
   let saleExitDecision = "";
   let leadOpenedStatus = "";
@@ -1328,7 +1329,8 @@
       phone: function (h) { return h.includes("telefone") || h.includes("whatsapp") || h === "celular"; },
       googleUrl: function (h) { return h.includes("linkdogoogle") || h.includes("perfilnogoogle") || h.includes("googlemaps") || h.includes("urlperfilgoogle"); },
       rating: function (h) { return h === "nota" || h.includes("notamedia") || h === "avaliacao"; },
-      message: function (h) { return h === "mensagem" || h.includes("mensagemdeabertura"); },
+      approach: function (h) { return h === "abordagem" || h.includes("mensagemdeabertura") || (h.includes("abordagem") && !h.includes("script")); },
+      message: function (h) { return h === "mensagem"; },
       script: function (h) { return h === "script" || h.includes("scriptdeabordagem") || h.includes("scriptcompleto") || h.includes("scriptdoatendimento"); },
       location: function (h) { return h.includes("bairro") || h.includes("regiao") || h.includes("cidade"); },
       category: function (h) { return h === "categoria" || h.includes("tipodenegocio"); }
@@ -1341,7 +1343,7 @@
     if (rows.length < 2) return { leads: [], error: "Não encontrei uma tabela Markdown. Confira se a resposta tem colunas separadas por |." };
     const headers = rows[0];
     const indexes = {};
-    ["name", "phone", "googleUrl", "reviews", "rating", "competitor", "competitorReviews", "message", "script", "location", "category"].forEach(function (key) {
+    ["name", "phone", "googleUrl", "reviews", "rating", "competitor", "competitorReviews", "approach", "message", "script", "location", "category"].forEach(function (key) {
       indexes[key] = columnIndex(headers, key);
     });
     const messageColumns = headers.map(function (header, index) {
@@ -1360,6 +1362,7 @@
       };
       const name = val("name");
       if (!meaningfulImportValue(name) || normalize(name) === "comercio") return;
+      const approachCell = val("approach") || val("message");
       let scriptSteps = parseScriptCell(val("script"));
       if (!scriptSteps.length) {
         const messageCells = messageColumns.map(function (column) { return (cells[column.index] || "").trim(); }).filter(function (value) { return value && !isMissingValue(value); });
@@ -1367,14 +1370,17 @@
         else scriptSteps = messageCells.map(function (value, index) { return scriptStepFromText(index, value); });
       }
       if (!scriptSteps.length) {
-        const single = val("message");
-        if (single && !isMissingValue(single)) scriptSteps = single.includes("###") ? parseScriptCell(single) : scriptFromMessage(single);
+        if (approachCell && !isMissingValue(approachCell)) scriptSteps = approachCell.includes("###") ? parseScriptCell(approachCell) : scriptFromMessage(approachCell);
+      }
+      if (approachCell && !isMissingValue(approachCell) && scriptSteps.length) {
+        scriptSteps = normalizeScriptSteps(scriptSteps);
+        scriptSteps[0].text = approachCell;
       }
       parsed.push({
         id: uid(), name: name, phone: val("phone"), googleUrl: val("googleUrl"), category: val("category") || state.promptCategory,
         location: val("location") || state.promptLocation, reviews: val("reviews"), rating: val("rating"),
         competitor: val("competitor"), competitorReviews: val("competitorReviews"),
-        message: (scriptSteps[0] && scriptSteps[0].text) || val("message"), notes: "", source: "Pesquisa online", status: "Novo",
+        message: (scriptSteps[0] && scriptSteps[0].text) || approachCell, notes: "", source: "Pesquisa online", status: "Novo",
         script: scriptSteps,
         statusHistory: [{ at: new Date().toISOString(), from: "", to: "Novo" }],
         createdAt: new Date().toISOString()
@@ -1437,18 +1443,81 @@
   const importFields = [
     ["name", "Nome"], ["phone", "Telefone"], ["googleUrl", "Ficha do Google"], ["category", "Categoria"],
     ["location", "Região"], ["reviews", "Avaliações"], ["rating", "Nota"], ["competitor", "Concorrente"],
-    ["competitorReviews", "Avaliações do concorrente"], ["script", "Script"]
+    ["competitorReviews", "Avaliações do concorrente"], ["approach", "Abordagem (1ª mensagem)"], ["script", "Script completo"]
   ];
+  const mergeFields = importFields.concat([["source", "Origem"], ["notes", "Observações"]]);
   function meaningfulImportValue(value) {
     return !isMissingValue(value);
+  }
+  function firstScriptText(record) {
+    const steps = normalizeScriptSteps(record && record.script);
+    const first = steps.find(function (step) { return String(step.text || "").trim(); });
+    return first ? String(first.text).trim() : String((record && record.message) || "").trim();
   }
   function importFieldEqual(key, a, b) {
     if (key === "phone") return duplicateKey({ phone: a }).phone === duplicateKey({ phone: b }).phone;
     if (key === "googleUrl") return normalizedProfileUrl(a) === normalizedProfileUrl(b);
-    return normalize(key === "script" ? scriptStepsText(a) : a) === normalize(key === "script" ? scriptStepsText(b) : b);
+    return normalize(a) === normalize(b);
   }
   function importFieldValue(record, key) {
-    return key === "script" ? scriptStepsText(record ? record.script : "") : record ? record[key] : "";
+    if (key === "script") return scriptStepsText(record ? record.script : "");
+    if (key === "approach") return firstScriptText(record);
+    return record ? record[key] : "";
+  }
+  function approachText(record) {
+    return importFieldValue(record, "approach");
+  }
+  function setLeadApproach(lead, value) {
+    const text = String(value == null ? "" : value).trim();
+    if (!text) return;
+    const steps = normalizeScriptSteps(lead.script);
+    if (steps.length) {
+      steps[0].text = text;
+      lead.script = steps;
+    } else {
+      lead.script = scriptFromMessage(text);
+    }
+    lead.message = text;
+  }
+  function cloneScriptSteps(value) {
+    return normalizeScriptSteps(value).map(function (step) {
+      return { num: step.num, title: step.title, text: step.text, note: step.note };
+    });
+  }
+  function selectedImportTarget(item) {
+    return item.targets.find(function (target) { return target.type === item.selectedType && target.id === item.selectedId; }) || item.targets[0];
+  }
+  function defaultImportChoices(incoming, target) {
+    const choices = {};
+    importFields.forEach(function (field) {
+      const key = field[0];
+      const current = importFieldValue(target, key);
+      const incomingValue = importFieldValue(incoming, key);
+      choices[key] = meaningfulImportValue(incomingValue) && !meaningfulImportValue(current) ? "incoming" : "current";
+    });
+    return choices;
+  }
+  function setImportChoices(item, mode, target) {
+    importFields.forEach(function (field) {
+      const key = field[0];
+      const currentOk = meaningfulImportValue(importFieldValue(target, key));
+      const incomingOk = meaningfulImportValue(importFieldValue(item.incoming, key));
+      if (mode === "all") item.choices[key] = incomingOk ? "incoming" : "current";
+      else if (mode === "fill") item.choices[key] = !currentOk && incomingOk ? "incoming" : "current";
+      else item.choices[key] = "current";
+    });
+  }
+  function importIncomingKeys(item) {
+    const target = selectedImportTarget(item);
+    if (!target) return [];
+    return importFields.map(function (field) { return field[0]; }).filter(function (key) {
+      if (item.choices[key] !== "incoming") return false;
+      const incomingValue = importFieldValue(item.incoming, key);
+      if (!meaningfulImportValue(incomingValue)) return false;
+      const currentValue = importFieldValue(target.lead, key);
+      if (!meaningfulImportValue(currentValue)) return true;
+      return !importFieldEqual(key, currentValue, incomingValue);
+    });
   }
   function findDuplicateTargets(incoming, pool, type) {
     return pool.map(function (lead) {
@@ -1461,14 +1530,196 @@
     if (["Mandei", "Respondeu", "Sem resposta"].includes(status)) return "Mensagem enviada · " + status;
     return "Já contatado · " + status;
   }
-  function duplicateFieldChanges(incoming, target) {
-    return importFields.filter(function (field) {
+  function pairKey(pair) {
+    return pair.first.id + "|" + pair.second.id;
+  }
+  function mergeFieldCount(lead) {
+    return mergeFields.filter(function (field) { return meaningfulImportValue(importFieldValue(lead, field[0])); }).length;
+  }
+  function defaultMergeBase(first, second) {
+    const firstScore = STATUSES.indexOf(first.status || "Novo") * 100 + mergeFieldCount(first) + salesForLead(first.id).length * 60;
+    const secondScore = STATUSES.indexOf(second.status || "Novo") * 100 + mergeFieldCount(second) + salesForLead(second.id).length * 60;
+    return secondScore > firstScore ? "second" : "first";
+  }
+  function defaultMergeSelection(pair, base) {
+    const side = base === "second" ? "second" : "first";
+    const otherSide = side === "first" ? "second" : "first";
+    const baseLead = side === "first" ? pair.first : pair.second;
+    const otherLead = otherSide === "first" ? pair.first : pair.second;
+    const fields = {};
+    mergeFields.forEach(function (field) {
       const key = field[0];
-      const before = importFieldValue(target, key);
-      const after = importFieldValue(incoming, key);
-      if (!meaningfulImportValue(after)) return false;
-      return !meaningfulImportValue(before) || !importFieldEqual(key, before, after);
+      const baseValue = importFieldValue(baseLead, key);
+      const otherValue = importFieldValue(otherLead, key);
+      fields[key] = meaningfulImportValue(baseValue) ? side : (meaningfulImportValue(otherValue) ? otherSide : side);
     });
+    return { base: side, fields: fields };
+  }
+  function mergeSelectionFor(pair) {
+    const key = pairKey(pair);
+    const current = existingDuplicateSelections[key];
+    if (current && current.fields) {
+      mergeFields.forEach(function (field) {
+        if (!current.fields[field[0]]) current.fields[field[0]] = current.base;
+      });
+      return current;
+    }
+    const selection = defaultMergeSelection(pair, defaultMergeBase(pair.first, pair.second));
+    existingDuplicateSelections[key] = selection;
+    return selection;
+  }
+  function mergeOtherFieldCount(pair, selection) {
+    const otherSide = selection.base === "first" ? "second" : "first";
+    const baseLead = selection.base === "first" ? pair.first : pair.second;
+    const otherLead = otherSide === "first" ? pair.first : pair.second;
+    return mergeFields.filter(function (field) {
+      const key = field[0];
+      if (selection.fields[key] !== otherSide) return false;
+      const value = importFieldValue(otherLead, key);
+      if (!meaningfulImportValue(value)) return false;
+      const baseValue = importFieldValue(baseLead, key);
+      return !meaningfulImportValue(baseValue) || !importFieldEqual(key, baseValue, value);
+    }).length;
+  }
+  function shortValue(value, limit) {
+    const text = String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    return text.length > limit ? text.slice(0, limit - 1) + "…" : text;
+  }
+  function fieldValueMarkup(record, key) {
+    const value = importFieldValue(record, key);
+    if (!meaningfulImportValue(value)) return '<span class="dup-empty">(vazio)</span>';
+    if (key === "script") {
+      const count = normalizeScriptSteps(record.script).length;
+      return '<span class="dup-script-count">' + count + ' mensagem(ns)</span>';
+    }
+    if (key === "googleUrl") {
+      const href = googleProfileHref(value);
+      if (href) return '<a class="dup-link" href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer">Abrir no Google Maps</a>';
+    }
+    return escapeHtml(shortValue(value, key === "notes" || key === "approach" ? 180 : 90));
+  }
+  function fullTextMarkup(record, key, label) {
+    const value = importFieldValue(record, key);
+    return '<div class="dup-script-side"><strong>' + escapeHtml(label) + '</strong>' +
+      (meaningfulImportValue(value) ? '<p class="dup-script-text">' + escapeHtml(value) + '</p>' : '<span class="dup-empty">(vazio)</span>') + '</div>';
+  }
+  function scriptCompareMarkup(first, second, firstLabel, secondLabel) {
+    const blocks = [first, second].map(function (record, index) {
+      const label = index === 0 ? firstLabel : secondLabel;
+      const steps = normalizeScriptSteps(record && record.script);
+      if (!steps.length) return '<div class="dup-script-side"><strong>' + escapeHtml(label) + '</strong><span class="dup-empty">(sem script)</span></div>';
+      return '<div class="dup-script-side"><strong>' + escapeHtml(label) + ' · ' + steps.length + ' mensagem(ns)</strong><ol class="dup-script-steps">' +
+        steps.map(function (step) {
+          return '<li><b>' + escapeHtml(step.title || "Mensagem") + '</b><p>' + escapeHtml(step.text) + '</p></li>';
+        }).join("") + '</ol></div>';
+    }).join("");
+    return '<details class="dup-field-detail"><summary>Ver os dois scripts completos</summary><div class="dup-script-grid">' + blocks + '</div></details>';
+  }
+  function textCompareMarkup(first, second, key, firstLabel, secondLabel) {
+    return '<details class="dup-field-detail"><summary>Ver os dois textos completos</summary><div class="dup-script-grid">' +
+      fullTextMarkup(first, key, firstLabel) + fullTextMarkup(second, key, secondLabel) + '</div></details>';
+  }
+  function optionMarkup(attributes, selected, sideLabel, record, key) {
+    return '<label class="dup-option' + (selected ? ' is-selected' : '') + '">' +
+      '<input type="radio" ' + attributes + (selected ? ' checked' : '') + '>' +
+      '<span class="dup-option-check" aria-hidden="true"></span>' +
+      '<span class="dup-option-body"><small>' + escapeHtml(sideLabel) + '</small>' + fieldValueMarkup(record, key) + '</span>' +
+      '</label>';
+  }
+  function equalFieldMarkup(label, record, key) {
+    return '<div class="dup-field dup-field-equal"><div class="dup-field-head"><span class="dup-field-label">' + escapeHtml(label) + '</span><span class="dup-field-tag">Igual</span></div><div class="dup-same-value">' + fieldValueMarkup(record, key) + '</div></div>';
+  }
+  function importFieldRowMarkup(item, index, field) {
+    const key = field[0];
+    const label = field[1];
+    const target = selectedImportTarget(item);
+    if (!target) return "";
+    const targetLead = target.lead;
+    const current = importFieldValue(targetLead, key);
+    const incoming = importFieldValue(item.incoming, key);
+    const currentOk = meaningfulImportValue(current);
+    const incomingOk = meaningfulImportValue(incoming);
+    if (!currentOk && !incomingOk) return "";
+    if (currentOk && incomingOk && importFieldEqual(key, current, incoming)) return equalFieldMarkup(label, targetLead, key);
+    const selected = item.choices[key] === "incoming" && incomingOk ? "incoming" : "current";
+    const extra = key === "script"
+      ? scriptCompareMarkup(targetLead, item.incoming, "Na ficha", "Da tabela")
+      : (key === "approach" || key === "notes" ? textCompareMarkup(targetLead, item.incoming, key, "Na ficha", "Da tabela") : "");
+    if (!incomingOk) {
+      return '<div class="dup-field"><div class="dup-field-head"><span class="dup-field-label">' + escapeHtml(label) + '</span><span class="dup-field-tag">Sem dado novo</span></div><div class="dup-same-value">' + fieldValueMarkup(targetLead, key) + '</div></div>';
+    }
+    return '<div class="dup-field"><div class="dup-field-head"><span class="dup-field-label">' + escapeHtml(label) + '</span><span class="dup-field-tag">Escolha</span></div><div class="dup-options">' +
+      optionMarkup('name="dup-import-' + index + '-' + key + '" value="current" data-duplicate-choice="' + index + '" data-duplicate-key="' + key + '"', selected === "current", "Na ficha", targetLead, key) +
+      optionMarkup('name="dup-import-' + index + '-' + key + '" value="incoming" data-duplicate-choice="' + index + '" data-duplicate-key="' + key + '"', selected === "incoming", "Da tabela", item.incoming, key) +
+      '</div>' + extra + '</div>';
+  }
+  function mergeFieldRowMarkup(pair, selection, field) {
+    const key = field[0];
+    const label = field[1];
+    const firstValue = importFieldValue(pair.first, key);
+    const secondValue = importFieldValue(pair.second, key);
+    const firstOk = meaningfulImportValue(firstValue);
+    const secondOk = meaningfulImportValue(secondValue);
+    if (!firstOk && !secondOk) return "";
+    if (firstOk && secondOk && importFieldEqual(key, firstValue, secondValue)) return equalFieldMarkup(label, pair.first, key);
+    let selected = selection.fields[key] || selection.base;
+    if (selected === "first" && !firstOk) selected = secondOk ? "second" : "first";
+    if (selected === "second" && !secondOk) selected = firstOk ? "first" : "second";
+    const extra = key === "script"
+      ? scriptCompareMarkup(pair.first, pair.second, "Ficha 1", "Ficha 2")
+      : (key === "approach" || key === "notes" ? textCompareMarkup(pair.first, pair.second, key, "Ficha 1", "Ficha 2") : "");
+    const groupName = "dup-merge-" + escapeHtml(pairKey(pair)) + "-" + key;
+    const attrs = function (source) {
+      return 'name="' + groupName + '" value="' + source + '" data-merge-field="' + escapeHtml(pairKey(pair)) + '" data-merge-key="' + key + '" data-merge-source="' + source + '"';
+    };
+    return '<div class="dup-field"><div class="dup-field-head"><span class="dup-field-label">' + escapeHtml(label) + '</span><span class="dup-field-tag">Escolha</span></div><div class="dup-options">' +
+      optionMarkup(attrs("first"), selected === "first", "Ficha 1" + (firstOk ? "" : " (vazia)"), pair.first, key) +
+      optionMarkup(attrs("second"), selected === "second", "Ficha 2" + (secondOk ? "" : " (vazia)"), pair.second, key) +
+      '</div>' + extra + '</div>';
+  }
+  function mergeLeadCardMarkup(pair, lead, side, selection) {
+    const key = pairKey(pair);
+    const isBase = selection.base === side;
+    const location = [lead.category, lead.location].filter(Boolean).join(" · ");
+    return '<div class="dup-ficha' + (isBase ? ' is-base' : '') + '">' +
+      '<label class="dup-ficha-pick"><input type="radio" name="dup-base-' + escapeHtml(key) + '" data-merge-base="' + escapeHtml(key) + '" value="' + side + '"' + (isBase ? " checked" : "") + '><span>' + (isBase ? "Fica esta ficha" : "Escolher esta") + '</span></label>' +
+      '<strong>' + escapeHtml(lead.name || "Comércio sem nome") + '</strong>' +
+      '<small>' + escapeHtml(lead.phone || "Sem telefone") + (location ? " · " + escapeHtml(location) : "") + '</small>' +
+      '<div class="dup-ficha-tags"><span class="dup-ficha-tag">' + escapeHtml(duplicateStatus(lead)) + '</span><span class="dup-ficha-tag">' + mergeFieldCount(lead) + ' campo(s)</span></div>' +
+      '<div class="dup-ficha-actions"><button class="small-action" type="button" data-open-existing-lead="' + escapeHtml(lead.id) + '">Abrir ficha</button><button class="duplicate-delete-button" type="button" data-delete-existing-lead="' + escapeHtml(lead.id) + '" aria-label="Excluir ficha de ' + escapeHtml(lead.name || "comércio sem nome") + '" title="Excluir esta ficha"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4m2.2 0-.6 9.2a1 1 0 0 1-1 .9H5.4a1 1 0 0 1-1-.9L3.8 4m2.7 2.2v5m3-5v5"/></svg></button></div>' +
+      '<span class="dup-ficha-role ' + (isBase ? 'is-keep' : 'is-drop') + '">' + (isBase ? "Ficha principal" : "Ficha secundária") + '</span>' +
+      '</div>';
+  }
+  function mergePairMarkup(pair) {
+    const selection = mergeSelectionFor(pair);
+    const baseLead = selection.base === "first" ? pair.first : pair.second;
+    const otherLead = selection.base === "first" ? pair.second : pair.first;
+    const otherCount = mergeOtherFieldCount(pair, selection);
+    const remindersCount = state.reminders.filter(function (reminder) { return reminder.leadId === otherLead.id; }).length;
+    const salesCount = salesForLead(otherLead.id).length;
+    const evidence = pair.reasons.map(function (reason) {
+      let values = "";
+      if (reason === "Nome igual") values = pair.first.name;
+      if (reason === "Telefone igual") values = pair.first.phone + " · " + pair.second.phone;
+      if (reason === "Ficha do Google igual") values = "mesmo estabelecimento do Google Maps";
+      return '<span class="dup-reason"><strong>' + escapeHtml(reason) + ':</strong> ' + escapeHtml(values) + '</span>';
+    }).join("");
+    const rows = mergeFields.map(function (field) { return mergeFieldRowMarkup(pair, selection, field); }).filter(Boolean).join("");
+    const transferNote = [remindersCount ? remindersCount + " lembrete(s)" : "", salesCount ? salesCount + " venda(s)" : ""].filter(Boolean).join(" e ");
+    const summary = '<strong>' + escapeHtml(baseLead.name || "Comércio sem nome") + '</strong> fica como ficha principal. ' +
+      (otherCount ? otherCount + ' campo(s) serão copiados da outra ficha. ' : 'Nenhum dado da outra ficha será copiado. ') +
+      (transferNote ? 'Ao excluir a outra, ' + transferNote + ' serão movidos para esta ficha.' : 'Nenhum lembrete ou venda está ligado à outra ficha.');
+    return '<article class="duplicate-card existing-duplicate-card dup-merge-card">' +
+      '<div class="duplicate-card-heading"><div><strong>Possível duplicado</strong><small>Escolha a ficha que fica e clique nos dados que devem permanecer.</small></div><span class="duplicate-match-badge">' + pair.reasons.length + ' dado(s) em comum</span></div>' +
+      '<div class="dup-reasons">' + evidence + '</div>' +
+      '<div class="dup-ficha-grid">' + mergeLeadCardMarkup(pair, pair.first, "first", selection) + mergeLeadCardMarkup(pair, pair.second, "second", selection) + '</div>' +
+      '<div class="dup-compare-head"><strong>O que fica na ficha principal?</strong><small>Cada linha é um dado. Se não clicar, continua como está.</small></div>' +
+      '<div class="dup-fields">' + rows + '</div>' +
+      '<div class="dup-merge-footer"><div class="dup-merge-summary">' + summary + '</div><div class="dup-merge-actions">' +
+      '<button class="button button-secondary" type="button" data-merge-save="' + escapeHtml(pairKey(pair)) + '">Salvar escolhas sem excluir</button>' +
+      '<button class="button button-primary" type="button" data-merge-apply="' + escapeHtml(pairKey(pair)) + '">Unificar e excluir a outra</button>' +
+      '</div></div></article>';
   }
   function existingDuplicatePairs() {
     const pairs = [];
@@ -1488,22 +1739,78 @@
     const summary = $("#existingDuplicateSummary");
     const list = $("#existingDuplicateList");
     summary.textContent = pairs.length
-      ? pairs.length + " par(es) encontrado(s) entre " + state.leads.length + " leads. O critério é o mesmo da importação; nota e quantidade de avaliações não contam como identidade."
+      ? pairs.length + " par(es) encontrado(s) entre " + state.leads.length + " leads. Escolha abaixo qual ficha fica e clique nos dados que devem permanecer. Nota e quantidade de avaliações não contam como identidade."
       : "Nenhum duplicado encontrado entre " + state.leads.length + " leads com os critérios atuais: nome, telefone válido ou ficha real do Google.";
-    list.innerHTML = pairs.length ? pairs.map(function (pair) {
-      const leadsMarkup = [pair.first, pair.second].map(function (lead) {
-        const location = [lead.category, lead.location].filter(Boolean).join(" · ");
-        return '<div class="existing-duplicate-lead"><div><strong>' + escapeHtml(lead.name || "Comércio sem nome") + '</strong><small>' + escapeHtml(lead.phone || "Sem telefone") + (location ? " · " + escapeHtml(location) : "") + '</small><small>' + escapeHtml(duplicateStatus(lead)) + '</small></div><div class="existing-duplicate-actions"><button class="small-action" type="button" data-open-existing-lead="' + escapeHtml(lead.id) + '">Abrir ficha</button><button class="duplicate-delete-button" type="button" data-delete-existing-lead="' + escapeHtml(lead.id) + '" aria-label="Excluir ficha de ' + escapeHtml(lead.name || "comércio sem nome") + '" title="Excluir esta ficha"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4m2.2 0-.6 9.2a1 1 0 0 1-1 .9H5.4a1 1 0 0 1-1-.9L3.8 4m2.7 2.2v5m3-5v5"/></svg></button></div></div>';
-      }).join('<div class="existing-duplicate-connector" aria-hidden="true">↔</div>');
-      const evidence = pair.reasons.map(function (reason) {
-        let values = "";
-        if (reason === "Nome igual") values = pair.first.name;
-        if (reason === "Telefone igual") values = pair.first.phone + " · " + pair.second.phone;
-        if (reason === "Ficha do Google igual") values = "mesmo estabelecimento do Google Maps";
-        return '<span class="duplicate-field"><strong>' + escapeHtml(reason) + ':</strong> ' + escapeHtml(values) + '</span>';
-      }).join("");
-      return '<article class="duplicate-card existing-duplicate-card"><div class="duplicate-card-heading"><div><strong>Possível duplicado</strong><small>Confira as fichas antes de alterar ou excluir qualquer registro.</small></div><span class="duplicate-match-badge">' + pair.reasons.length + ' dado(s) em comum</span></div><div class="existing-duplicate-pair">' + leadsMarkup + '</div><div class="duplicate-data"><div class="duplicate-equal"><strong>Critérios que coincidiram:</strong>' + evidence + '</div></div></article>';
-    }).join("") : '<div class="existing-duplicate-empty">Nenhuma ficha correspondeu. Leads sem nome, telefone válido ou identidade reconhecível da ficha do Google não são marcados como duplicados.</div>';
+    list.innerHTML = pairs.length ? pairs.map(mergePairMarkup).join("") : '<div class="existing-duplicate-empty">Nenhuma ficha correspondeu. Leads sem nome, telefone válido ou identidade reconhecível da ficha do Google não são marcados como duplicados.</div>';
+  }
+  function mergeSelectedFields(pair, selection) {
+    const baseLead = selection.base === "first" ? pair.first : pair.second;
+    const firstLead = pair.first;
+    const secondLead = pair.second;
+    const approachSource = selection.fields.approach === "first" ? firstLead : secondLead;
+    mergeFields.forEach(function (field) {
+      const key = field[0];
+      if (key === "approach") return;
+      const source = selection.fields[key] === "first" ? firstLead : secondLead;
+      if (key === "script") {
+        const steps = cloneScriptSteps(source.script);
+        if (steps.length) baseLead.script = steps;
+        return;
+      }
+      if (meaningfulImportValue(importFieldValue(source, key))) baseLead[key] = source[key];
+    });
+    const approach = approachText(approachSource);
+    if (approach) setLeadApproach(baseLead, approach);
+    baseLead.script = normalizeScriptSteps(baseLead.script);
+    baseLead.message = (baseLead.script[0] && baseLead.script[0].text) || "";
+  }
+  function unifyExistingPair(key, deleteOther) {
+    const pair = existingDuplicatePairs().find(function (item) { return pairKey(item) === key; });
+    if (!pair) {
+      showToast("Este par de duplicados não está mais disponível.");
+      renderExistingDuplicateAnalysis();
+      return;
+    }
+    const selection = mergeSelectionFor(pair);
+    const baseLead = selection.base === "first" ? pair.first : pair.second;
+    const otherLead = selection.base === "first" ? pair.second : pair.first;
+    const otherCount = mergeOtherFieldCount(pair, selection);
+    const remindersCount = state.reminders.filter(function (reminder) { return reminder.leadId === otherLead.id; }).length;
+    const salesCount = salesForLead(otherLead.id).length;
+    if (deleteOther) {
+      const lines = [
+        "Unificar as fichas de " + (pair.first.name || "sem nome") + " e " + (pair.second.name || "sem nome") + "?",
+        "",
+        "Fica: " + (baseLead.name || "sem nome"),
+        "Sai: " + (otherLead.name || "sem nome"),
+        otherCount ? otherCount + " campo(s) serão copiados para a ficha que fica." : "Nenhum campo será copiado.",
+        (remindersCount || salesCount) ? (remindersCount + " lembrete(s) e " + salesCount + " venda(s) serão movidos para a ficha que fica.") : ""
+      ].filter(Boolean);
+      if (!window.confirm(lines.join("\n"))) return;
+    }
+    mergeSelectedFields(pair, selection);
+    if (deleteOther) {
+      state.sales.forEach(function (sale) {
+        if (sale.leadId === otherLead.id) {
+          sale.leadId = baseLead.id;
+          sale.leadName = baseLead.name || "Comércio sem nome";
+        }
+      });
+      state.reminders.forEach(function (reminder) {
+        if (reminder.leadId === otherLead.id) reminder.leadId = baseLead.id;
+      });
+      state.leads = state.leads.filter(function (lead) { return lead.id !== otherLead.id; });
+    }
+    state.sales.forEach(function (sale) {
+      if (sale.leadId === baseLead.id) sale.leadName = baseLead.name || "Comércio sem nome";
+    });
+    delete existingDuplicateSelections[key];
+    saveState();
+    renderLeads();
+    renderAgenda();
+    renderReports();
+    renderExistingDuplicateAnalysis();
+    showToast(deleteOther ? "Fichas unificadas; a ficha secundária foi excluída." : "Escolhas salvas na ficha principal.");
   }
   function showExistingDuplicateAnalysis() {
     const panel = $("#existingDuplicatePanel");
@@ -1511,39 +1818,37 @@
     renderExistingDuplicateAnalysis();
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+  function importDuplicateCardMarkup(item, index) {
+    const chosen = selectedImportTarget(item);
+    if (!chosen) return "";
+    if (!item.choices) item.choices = defaultImportChoices(item.incoming, chosen.lead);
+    const incoming = item.incoming;
+    const targetOptions = item.targets.length > 1
+      ? '<fieldset class="dup-targets"><legend>Qual ficha vai receber os dados?</legend>' + item.targets.map(function (target, targetIndex) {
+        const selected = target.type === item.selectedType && target.id === item.selectedId;
+        const label = target.type === "new" ? "Outro item desta importação: " + (target.lead.name || "Sem nome") : (target.lead.name || "Lead sem nome");
+        return '<label class="dup-target"><input type="radio" name="duplicate-target-' + index + '" data-duplicate-target="' + index + '" value="' + targetIndex + '"' + (selected ? " checked" : "") + '><span><strong>' + escapeHtml(label) + '</strong><small>' + escapeHtml(target.reasons.join(" · ")) + ' · ' + escapeHtml(duplicateStatus(target.lead)) + '</small></span></label>';
+      }).join("") + '</fieldset>'
+      : '<div class="dup-targets-single">Comparando com <strong>' + escapeHtml(chosen.lead.name || "Lead sem nome") + '</strong><small>' + escapeHtml(chosen.reasons.join(" · ")) + ' · ' + escapeHtml(duplicateStatus(chosen.lead)) + '</small></div>';
+    const rows = importFields.map(function (field) { return importFieldRowMarkup(item, index, field); }).filter(Boolean).join("");
+    const changeCount = importIncomingKeys(item).length;
+    return '<article class="duplicate-card dup-card">' +
+      '<div class="duplicate-card-heading"><div><strong>Importado: ' + escapeHtml(incoming.name || "Comércio sem nome") + '</strong><small>' + escapeHtml(incoming.phone || "Sem telefone informado") + '</small></div><span class="duplicate-match-badge">Possível duplicado</span></div>' +
+      targetOptions +
+      '<div class="dup-quick-actions"><span class="dup-quick-label">Atalhos:</span><button class="dup-quick" type="button" data-duplicate-quick="keep" data-duplicate-index="' + index + '">Manter tudo</button><button class="dup-quick" type="button" data-duplicate-quick="fill" data-duplicate-index="' + index + '">Completar vazios</button><button class="dup-quick" type="button" data-duplicate-quick="all" data-duplicate-index="' + index + '">Usar tudo da tabela</button></div>' +
+      '<div class="dup-compare-head"><strong>Clique no dado que deve ficar</strong><small>O que não for escolhido continua como está na ficha.</small></div>' +
+      '<div class="dup-fields">' + rows + '</div>' +
+      '<div class="dup-card-footer"><span class="dup-count' + (changeCount ? "" : " is-empty") + '">' + (changeCount ? changeCount + ' campo(s) marcado(s) para atualizar' : "Nada será alterado nesta ficha") + '</span></div>' +
+      '</article>';
+  }
   function renderDuplicateReview() {
     if (!pendingImport) return;
     const duplicateCount = pendingImport.duplicates.length;
-    const updatesCount = pendingImport.duplicates.filter(function (item) { return item.update; }).length;
+    const updatesCount = pendingImport.duplicates.filter(function (item) { return importIncomingKeys(item).length > 0; }).length;
     const addedCount = pendingImport.addedCount;
     $("#duplicateSummary").innerHTML = '<strong>' + duplicateCount + ' possível(is) duplicado(s)</strong>' +
-      '<span class="duplicate-summary-detail">' + addedCount + ' lead(s) novo(s) já adicionado(s). ' + updatesCount + ' duplicado(s) marcado(s) para atualizar; status, observações e lembretes serão preservados.</span>';
-    $("#duplicateList").innerHTML = pendingImport.duplicates.map(function (item, index) {
-      const chosen = item.targets.find(function (target) { return target.type === item.selectedType && target.id === item.selectedId; }) || item.targets[0];
-      if (!chosen) return "";
-      const incoming = item.incoming;
-      const changedFields = duplicateFieldChanges(incoming, chosen.lead);
-      const sameFields = importFields.filter(function (field) {
-        const key = field[0];
-        return meaningfulImportValue(importFieldValue(incoming, key)) && meaningfulImportValue(importFieldValue(chosen.lead, key)) && importFieldEqual(key, importFieldValue(incoming, key), importFieldValue(chosen.lead, key));
-      });
-      const targetOptions = item.targets.map(function (target, targetIndex) {
-        const selected = target.type === item.selectedType && target.id === item.selectedId;
-        const label = target.type === "new" ? "Outro item desta importação: " + (target.lead.name || "Sem nome") : (target.lead.name || "Lead sem nome");
-        return '<label class="duplicate-target"><input type="radio" name="duplicate-target-' + index + '" data-duplicate-target="' + index + '" value="' + targetIndex + '"' + (selected ? " checked" : "") + '><span><strong>' + escapeHtml(label) + '</strong><small>' + escapeHtml(target.reasons.join(" · ")) + ' · ' + escapeHtml(duplicateStatus(target.lead)) + '</small></span></label>';
-      }).join("");
-      const differenceList = changedFields.length ? changedFields.map(function (field) {
-        const before = meaningfulImportValue(importFieldValue(chosen.lead, field[0])) ? importFieldValue(chosen.lead, field[0]) : "(vazio)";
-        return '<span class="duplicate-field"><strong>' + escapeHtml(field[1]) + ':</strong> ' + escapeHtml(before) + ' <span aria-hidden="true">→</span> ' + escapeHtml(importFieldValue(incoming, field[0])) + '</span>';
-      }).join("") : '<span class="duplicate-field">Nenhum dado de pesquisa novo ou diferente.</span>';
-      const equalMarkup = sameFields.length ? sameFields.map(function (field) {
-        return '<span class="duplicate-field"><strong>' + escapeHtml(field[1]) + ':</strong> ' + escapeHtml(importFieldValue(chosen.lead, field[0])) + '</span>';
-      }).join("") : '<span class="duplicate-field">nenhum dado preenchido coincide</span>';
-      return '<article class="duplicate-card"><div class="duplicate-card-heading"><div><strong>Importado: ' + escapeHtml(incoming.name || "Comércio sem nome") + '</strong><small>' + escapeHtml(incoming.phone || "Sem telefone informado") + '</small></div><span class="duplicate-match-badge">Possível duplicado</span></div>' +
-        '<fieldset class="duplicate-targets"><legend>Escolha qual ficha comparar e, se quiser, atualizar</legend>' + targetOptions + '</fieldset>' +
-        '<div class="duplicate-data"><div class="duplicate-equal"><strong>Dados iguais:</strong>' + equalMarkup + '</div><div class="duplicate-differences"><strong>Diferenças / dados para completar:</strong>' + differenceList + '</div></div>' +
-        '<label class="duplicate-update"><input type="checkbox" data-duplicate-update="' + index + '"' + (item.update ? " checked" : "") + '><span>Atualizar os dados de pesquisa desta ficha</span></label></article>';
-    }).join("");
+      '<span class="duplicate-summary-detail">' + addedCount + ' lead(s) novo(s) já adicionado(s). ' + updatesCount + ' ficha(s) com dados escolhidos para atualizar; status, observações e lembretes serão preservados.</span>';
+    $("#duplicateList").innerHTML = pendingImport.duplicates.map(importDuplicateCardMarkup).join("");
     $("#duplicateReview").classList.remove("hidden");
   }
   function importTable() {
@@ -1562,7 +1867,7 @@
       let targets = findDuplicateTargets(lead, state.leads, "existing");
       if (!targets.length) targets = findDuplicateTargets(lead, staged, "new");
       if (targets.length) {
-        duplicates.push({ incoming: lead, targets: targets, selectedType: targets[0].type, selectedId: targets[0].id, update: false });
+        duplicates.push({ incoming: lead, targets: targets, selectedType: targets[0].type, selectedId: targets[0].id, choices: defaultImportChoices(lead, targets[0].lead) });
       } else staged.push(lead);
     });
     if (staged.length) {
@@ -1598,34 +1903,53 @@
     $("#importStatus").textContent = "Revisão descartada. " + addedCount + " lead(s) novo(s) permanecem no CRM; os " + duplicateCount + " duplicado(s) não foram alterados.";
     $("#importStatus").classList.remove("error-text");
   }
+  function applyImportChoices(lead, item) {
+    const keys = importIncomingKeys(item);
+    const scriptSelected = keys.indexOf("script") >= 0;
+    const approachSelected = keys.indexOf("approach") >= 0;
+    const currentApproach = approachText(lead);
+    keys.forEach(function (key) {
+      if (key === "script" || key === "approach") return;
+      if (meaningfulImportValue(item.incoming[key])) lead[key] = item.incoming[key];
+    });
+    if (scriptSelected) {
+      const steps = cloneScriptSteps(item.incoming.script);
+      if (steps.length) lead.script = steps;
+    }
+    if (scriptSelected && !approachSelected && currentApproach) setLeadApproach(lead, currentApproach);
+    if (approachSelected) {
+      const approach = approachText(item.incoming);
+      if (approach) setLeadApproach(lead, approach);
+    }
+    lead.script = normalizeScriptSteps(lead.script);
+    lead.message = (lead.script[0] && lead.script[0].text) || "";
+  }
   function applyImportReview() {
     if (!pendingImport) return;
-    const updates = pendingImport.duplicates.filter(function (item) { return item.update; });
-    updates.forEach(function (item) {
-      const target = item.targets.find(function (candidate) { return candidate.type === item.selectedType && candidate.id === item.selectedId; });
-      if (!target) return;
-      const applyFields = function (lead) {
-        importFields.forEach(function (field) {
-          const key = field[0];
-          if (meaningfulImportValue(item.incoming[key])) lead[key] = item.incoming[key];
-        });
-      };
-      const current = state.leads.find(function (lead) { return lead.id === target.id; });
-      if (current) applyFields(current);
-    });
     const newCount = pendingImport.addedCount;
     const duplicateCount = pendingImport.duplicates.length;
-    const updateCount = updates.length;
+    let updateCount = 0;
+    let fieldCount = 0;
+    pendingImport.duplicates.forEach(function (item) {
+      const target = selectedImportTarget(item);
+      const keys = importIncomingKeys(item);
+      const current = target ? state.leads.find(function (lead) { return lead.id === target.id; }) : null;
+      if (!current || !keys.length) return;
+      applyImportChoices(current, item);
+      updateCount += 1;
+      fieldCount += keys.length;
+    });
     if (updateCount) saveState();
     pendingImport = null;
     $("#duplicateReview").classList.add("hidden");
     $("#duplicateSummary").innerHTML = "";
     $("#duplicateList").innerHTML = "";
-    $("#importStatus").textContent = newCount + " lead(s) novo(s) já adicionados; " + updateCount + " ficha(s) atualizada(s) e " + (duplicateCount - updateCount) + " duplicado(s) ignorado(s).";
+    const ignoredCount = duplicateCount - updateCount;
+    $("#importStatus").textContent = newCount + " lead(s) novo(s) já adicionados; " + updateCount + " ficha(s) atualizada(s) com " + fieldCount + " campo(s) e " + ignoredCount + " duplicado(s) mantido(s) como estavam.";
     $("#importStatus").classList.remove("error-text");
     renderLeads();
     renderAgenda();
-    showToast(updateCount + " ficha(s) atualizada(s); " + (duplicateCount - updateCount) + " duplicado(s) ignorado(s).");
+    showToast(updateCount + " ficha(s) atualizada(s); " + ignoredCount + " duplicado(s) mantido(s) como estavam.");
   }
 
   function openReminder(id, defaultLeadId) {
@@ -1971,16 +2295,54 @@
   $("#analyzeDuplicates").addEventListener("click", showExistingDuplicateAnalysis);
   $("#closeExistingDuplicatePanel").addEventListener("click", function () { $("#existingDuplicatePanel").classList.add("hidden"); });
   $("#existingDuplicateList").addEventListener("click", function (event) {
-    const button = event.target.closest("[data-open-existing-lead]");
-    if (button) openLead(button.dataset.openExistingLead);
+    const openButton = event.target.closest("[data-open-existing-lead]");
+    if (openButton) { openLead(openButton.dataset.openExistingLead); return; }
     const deleteButton = event.target.closest("[data-delete-existing-lead]");
-    if (deleteButton) deleteLeadById(deleteButton.dataset.deleteExistingLead);
+    if (deleteButton) {
+      if (deleteLeadById(deleteButton.dataset.deleteExistingLead)) renderExistingDuplicateAnalysis();
+      return;
+    }
+    const saveButton = event.target.closest("[data-merge-save]");
+    if (saveButton) { unifyExistingPair(saveButton.dataset.mergeSave, false); return; }
+    const applyButton = event.target.closest("[data-merge-apply]");
+    if (applyButton) { unifyExistingPair(applyButton.dataset.mergeApply, true); return; }
+  });
+  $("#existingDuplicateList").addEventListener("change", function (event) {
+    const baseRadio = event.target.closest("[data-merge-base]");
+    if (baseRadio) {
+      const pair = existingDuplicatePairs().find(function (item) { return pairKey(item) === baseRadio.dataset.mergeBase; });
+      if (pair) {
+        existingDuplicateSelections[baseRadio.dataset.mergeBase] = defaultMergeSelection(pair, baseRadio.value);
+        renderExistingDuplicateAnalysis();
+      }
+      return;
+    }
+    const fieldRadio = event.target.closest("[data-merge-field]");
+    if (fieldRadio) {
+      const pair = existingDuplicatePairs().find(function (item) { return pairKey(item) === fieldRadio.dataset.mergeField; });
+      if (pair) {
+        const selection = mergeSelectionFor(pair);
+        selection.fields[fieldRadio.dataset.mergeKey] = fieldRadio.dataset.mergeSource;
+        renderExistingDuplicateAnalysis();
+      }
+    }
   });
   $("#emptyImport").addEventListener("click", function () { $("#importPanel").classList.remove("hidden"); $("#importText").focus(); });
   $("#closeImport").addEventListener("click", function () { $("#importPanel").classList.add("hidden"); });
   $("#importLeads").addEventListener("click", importTable);
   $("#cancelImportReview").addEventListener("click", cancelImportReview);
   $("#applyImport").addEventListener("click", applyImportReview);
+  $("#duplicateList").addEventListener("click", function (event) {
+    const quick = event.target.closest("[data-duplicate-quick]");
+    if (quick && pendingImport) {
+      const item = pendingImport.duplicates[Number(quick.dataset.duplicateIndex)];
+      const target = item && selectedImportTarget(item);
+      if (item && target) {
+        setImportChoices(item, quick.dataset.duplicateQuick, target.lead);
+        renderDuplicateReview();
+      }
+    }
+  });
   $("#duplicateList").addEventListener("change", function (event) {
     const radio = event.target.closest("[data-duplicate-target]");
     if (radio && pendingImport) {
@@ -1990,15 +2352,18 @@
       if (duplicate && target) {
         duplicate.selectedType = target.type;
         duplicate.selectedId = target.id;
+        duplicate.choices = defaultImportChoices(duplicate.incoming, target.lead);
         renderDuplicateReview();
       }
       return;
     }
-    const checkbox = event.target.closest("[data-duplicate-update]");
-    if (checkbox && pendingImport) {
-      const duplicate = pendingImport.duplicates[Number(checkbox.dataset.duplicateUpdate)];
-      if (duplicate) duplicate.update = checkbox.checked;
-      renderDuplicateReview();
+    const choice = event.target.closest("[data-duplicate-choice]");
+    if (choice && pendingImport) {
+      const duplicate = pendingImport.duplicates[Number(choice.dataset.duplicateChoice)];
+      if (duplicate) {
+        duplicate.choices[choice.dataset.duplicateKey] = choice.value;
+        renderDuplicateReview();
+      }
     }
   });
   $("#newLead").addEventListener("click", openNewLead);

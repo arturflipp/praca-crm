@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=24">
+  <link rel="stylesheet" href="styles.css?v=25">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=24" defer></script>
+  <script src="app.js?v=25" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -106,14 +106,14 @@
           <article class="stat-card stat-card-highlight"><span>Próximos lembretes</span><strong id="statReminders">0</strong><small>pendentes</small></article>
         </div>
         <section class="panel import-panel hidden" id="importPanel">
-          <div class="import-heading"><div><span class="step-badge">A</span><div><h2>Importar a tabela da IA</h2><p>Cole a tabela Markdown. Leads novos entram no CRM automaticamente; só possíveis duplicados ficam para revisão.</p></div></div><button class="icon-button" id="closeImport" aria-label="Fechar importação">×</button></div>
+          <div class="import-heading"><div><span class="step-badge">A</span><div><h2>Importar a tabela da IA</h2><p>Cole a tabela Markdown. Leads novos entram no CRM automaticamente; nos possíveis duplicados você escolhe, campo por campo, o que deve entrar em cada ficha.</p></div></div><button class="icon-button" id="closeImport" aria-label="Fechar importação">×</button></div>
           <label class="sr-only" for="importText">Tabela de resultados</label>
-          <textarea id="importText" class="import-text" placeholder="| Comércio | Telefone | Link do Google | Avaliações | Nota | Concorrente | Avaliações do concorrente | Mensagem |
-| Barbearia Exemplo | 13999990000 | não encontrado | 31 | 4,8 | Barbearia Centro | 280 | Oi, tudo bem?... |"></textarea>
+          <textarea id="importText" class="import-text" placeholder="| Comércio | Telefone | Link do Google | Avaliações | Nota | Concorrente | Avaliações do concorrente | Abordagem | Script |
+| Barbearia Exemplo | 13999990000 | não encontrado | 31 | 4,8 | Barbearia Centro | 280 | Oi, tudo bem?... | 1. Primeira mensagem: ... ### 2. ... |"></textarea>
           <section id="duplicateReview" class="duplicate-review hidden" aria-live="polite">
             <div id="duplicateSummary" class="duplicate-summary"></div>
             <div id="duplicateList" class="duplicate-list"></div>
-            <div class="duplicate-actions"><button class="button button-secondary" id="cancelImportReview" type="button">Ignorar duplicados</button><button class="button button-primary" id="applyImport" type="button">Salvar atualizações</button></div>
+            <div class="duplicate-actions"><button class="button button-secondary" id="cancelImportReview" type="button">Ignorar duplicados</button><button class="button button-primary" id="applyImport" type="button">Aplicar campos escolhidos</button></div>
           </section>
           <div class="import-footer"><div id="importStatus" class="helper" aria-live="polite">Ao analisar, leads novos serão adicionados; só duplicados ficarão para revisão.</div><button class="button button-primary" id="importLeads">Analisar e adicionar</button></div>
         </section>
