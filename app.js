@@ -132,18 +132,79 @@
     return { num: index + 1, title: title || SCRIPT_STEP_TITLES[index] || ("Mensagem " + (index + 1)), text: text, note: note };
   }
   const SCRIPT_CELL_SPLIT = /\s*###\s*|\s*\|\|\|\s*/;
-  const SCRIPT_BLOCK_TITLE = /^(?:(\d{1,2})\s*[.)]\s*)?([^:]{2,60}):\s*([\s\S]*)$/;
-  function parseScriptCell(cell) {
-    const blocks = String(cell || "").split(SCRIPT_CELL_SPLIT).map(function (part) {
-      return part.replace(/\s*⏎⏎\s*/g, "\n\n").replace(/\s*⏎\s*/g, "\n").replace(/<br\s*\/?\s*>/gi, "\n").trim();
+  const SCRIPT_BLOCK_TITLE = /^\s*(?:\*\*|__)?\s*(?:(\d{1,2})\s*[.)]\s*)?(?:\*\*|__)?\s*([^:]{2,60}?):\s*(?:\*\*|__)?\s*([\s\S]*)$/;
+  function cleanScriptMarkup(value) {
+    return String(value == null ? "" : value).replace(/^[*_]+|[*_]+$/g, "").trim();
+  }
+  function knownScriptTitle(value) {
+    const title = normalize(String(value == null ? "" : value).replace(/[*_]+/g, ""));
+    return SCRIPT_STEP_TITLES.some(function (known) { return normalize(known) === title; }) ||
+      /mensagem|abertura|follow|oportunidade|plaquinha|preco/.test(title);
+  }
+  function knownScriptLineTitle(value) {
+    const title = String(value == null ? "" : value).replace(/^\s*\d{1,2}\s*[.)]\s*/, "").replace(/[*_]+/g, "").trim();
+    return knownScriptTitle(title) && !/[,.?!]/.test(title) && !/\d\s*[.)]/.test(title);
+  }
+  function scriptPartsFromBlock(block) {
+    const normalized = block.replace(/\s*⏎⏎\s*/g, "\n\n").replace(/\s*⏎\s*/g, "\n").replace(/<br\s*\/?\s*>/gi, "\n");
+    const starts = [];
+    const pattern = /\d{1,2}\s*[.)]\s*(?:\*\*|__)?\s*([^:]{2,60}?):/g;
+    let match;
+    while ((match = pattern.exec(normalized))) {
+      if (/^\s*\d/.test(match[1])) {
+        const inner = match[1].match(/\d{1,2}\s*[.)]/);
+        if (inner) {
+          pattern.lastIndex = match.index + match[0].indexOf(match[1]) + inner.index;
+          continue;
+        }
+      }
+      if (knownScriptTitle(match[1])) starts.push(match.index);
+    }
+    const linePattern = /^(?:\*\*|__)?\s*([^:\n]{2,60}?):/gm;
+    while ((match = linePattern.exec(normalized))) {
+      if (knownScriptLineTitle(match[1])) starts.push(match.index);
+    }
+    const ordered = starts.slice().sort(function (a, b) { return a - b; }).reduce(function (list, start) {
+      if (!list.length) { list.push(start); return list; }
+      const previous = list[list.length - 1];
+      if (start === previous) return list;
+      if (!/[a-z0-9]/i.test(normalized.slice(previous, start))) return list;
+      list.push(start);
+      return list;
+    }, []);
+    if (!ordered.length) return [normalized.trim()].filter(Boolean);
+    if (ordered.length === 1) return [normalized.slice(ordered[0]).trim()].filter(Boolean);
+    return ordered.map(function (start, index) {
+      const end = index + 1 < ordered.length ? ordered[index + 1] : normalized.length;
+      return normalized.slice(start, end).trim();
     }).filter(Boolean);
-    if (!blocks.length) return [];
-    return blocks.map(function (block, index) {
-      const match = block.match(SCRIPT_BLOCK_TITLE);
-      const title = match ? match[2].trim() : "";
-      const text = match ? match[3].trim() : block;
-      return scriptStepFromText(index, text, title || undefined);
+  }
+  function looksLikeScript(value) {
+    const text = String(value == null ? "" : value);
+    if (/###|\|\|\||<br\s*\/?>|⏎/.test(text)) return true;
+    const numbered = /\d{1,2}\s*[.)]\s*(?:\*\*|__)?\s*([^:]{2,60}?):/g;
+    let match;
+    while ((match = numbered.exec(text))) {
+      if (!/^\s*\d/.test(match[1]) && knownScriptTitle(match[1])) return true;
+    }
+    const line = /^(?:\*\*|__)?\s*([^:\n]{2,60}?):/gm;
+    while ((match = line.exec(text))) {
+      if (knownScriptLineTitle(match[1])) return true;
+    }
+    return false;
+  }
+  function parseScriptCell(cell) {
+    const blocks = String(cell || "").split(SCRIPT_CELL_SPLIT).map(function (part) { return part.trim(); }).filter(Boolean);
+    const parts = [];
+    blocks.forEach(function (block) {
+      scriptPartsFromBlock(block).forEach(function (part) { parts.push(part); });
     });
+    return parts.map(function (block, index) {
+      const match = block.match(SCRIPT_BLOCK_TITLE);
+      const title = match ? cleanScriptMarkup(match[2]) : "";
+      const text = cleanScriptMarkup(match ? match[3] : block);
+      return scriptStepFromText(index, text, title || undefined);
+    }).filter(function (step) { return step.text; });
   }
   function scriptStepsText(value) {
     if (typeof value === "string") return value;
@@ -1331,30 +1392,54 @@
       rating: function (h) { return h === "nota" || h.includes("notamedia") || h === "avaliacao"; },
       approach: function (h) { return h === "abordagem" || h.includes("mensagemdeabertura") || (h.includes("abordagem") && !h.includes("script")); },
       message: function (h) { return h === "mensagem"; },
-      script: function (h) { return h === "script" || h.includes("scriptdeabordagem") || h.includes("scriptcompleto") || h.includes("scriptdoatendimento"); },
+      script: function (h) { return h.includes("script"); },
       location: function (h) { return h.includes("bairro") || h.includes("regiao") || h.includes("cidade"); },
       category: function (h) { return h === "categoria" || h.includes("tipodenegocio"); }
     };
     return normalized.findIndex(predicates[kind]);
   }
+  function parseTableRows(lines, headerIndex, headers) {
+    const rows = [];
+    let current = null;
+    for (let index = headerIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index].trim();
+      if (!line) continue;
+      let cells = splitTableRow(line);
+      if (isSeparatorRow(cells)) continue;
+      if (cells.length > headers.length) {
+        cells = cells.slice(0, headers.length - 1).concat([cells.slice(headers.length - 1).join(" | ")]);
+      }
+      if (cells.length === 1) {
+        if (!current) current = cells;
+        else current[current.length - 1] = (current[current.length - 1] + "\n" + cells[0]).trim();
+      } else {
+        if (current) rows.push(current);
+        current = cells;
+      }
+    }
+    if (current) rows.push(current);
+    return rows;
+  }
   function parseTable(text) {
-    const lines = text.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
-    const rows = lines.filter(function (line) { return line.includes("|"); }).map(splitTableRow);
-    if (rows.length < 2) return { leads: [], error: "Não encontrei uma tabela Markdown. Confira se a resposta tem colunas separadas por |." };
-    const headers = rows[0];
+    const lines = text.split(/\r?\n/).map(function (line) { return line.trim(); });
+    const headerIndex = lines.findIndex(function (line) { return line.includes("|"); });
+    if (headerIndex < 0) return { leads: [], error: "Não encontrei uma tabela Markdown. Confira se a resposta tem colunas separadas por |." };
+    const headers = splitTableRow(lines[headerIndex]);
+    const rows = parseTableRows(lines, headerIndex, headers);
+    if (!rows.length) return { leads: [], error: "Não encontrei uma tabela Markdown. Confira se a resposta tem colunas separadas por |." };
     const indexes = {};
     ["name", "phone", "googleUrl", "reviews", "rating", "competitor", "competitorReviews", "approach", "message", "script", "location", "category"].forEach(function (key) {
       indexes[key] = columnIndex(headers, key);
     });
     const messageColumns = headers.map(function (header, index) {
-      const normalizedHeader = normalize(header).replace(/\d+$/, "");
+      const normalizedHeader = normalize(header).replace(/^\d+[aºª°]?/, "").replace(/\d+$/, "");
       const number = Number(String(header).replace(/\D/g, "")) || 0;
       return NUMBER_MESSAGE_HEADERS.test(normalizedHeader) ? { index: index, number: number } : null;
     }).filter(Boolean).sort(function (a, b) { return a.number - b.number; });
     if (indexes.name < 0) return { leads: [], error: "A tabela precisa ter uma coluna Comércio ou Nome." };
     if (indexes.reviews < 0) return { leads: [], error: "Não encontrei a coluna Avaliações." };
     const parsed = [];
-    rows.slice(1).forEach(function (cells) {
+    rows.forEach(function (cells) {
       if (isSeparatorRow(cells)) return;
       const val = function (key) {
         const index = indexes[key];
@@ -1362,25 +1447,28 @@
       };
       const name = val("name");
       if (!meaningfulImportValue(name) || normalize(name) === "comercio") return;
-      const approachCell = val("approach") || val("message");
-      let scriptSteps = parseScriptCell(val("script"));
+      const approachCell = val("approach");
+      const legacyMessage = val("message");
+      const approachIsFullScript = looksLikeScript(approachCell);
+      const approachValue = approachCell && !approachIsFullScript && !isMissingValue(approachCell) ? approachCell : "";
+      const scriptCell = val("script");
+      let scriptSteps = scriptCell && looksLikeScript(scriptCell) ? parseScriptCell(scriptCell) : (scriptCell ? scriptFromMessage(scriptCell) : []);
       if (!scriptSteps.length) {
         const messageCells = messageColumns.map(function (column) { return (cells[column.index] || "").trim(); }).filter(function (value) { return value && !isMissingValue(value); });
-        if (messageCells.length === 1 && (messageCells[0].includes("###") || /^\s*\d+\s*[.)]/.test(messageCells[0]))) scriptSteps = parseScriptCell(messageCells[0]);
+        if (messageCells.length === 1) scriptSteps = looksLikeScript(messageCells[0]) ? parseScriptCell(messageCells[0]) : scriptFromMessage(messageCells[0]);
         else scriptSteps = messageCells.map(function (value, index) { return scriptStepFromText(index, value); });
       }
       if (!scriptSteps.length) {
-        if (approachCell && !isMissingValue(approachCell)) scriptSteps = approachCell.includes("###") ? parseScriptCell(approachCell) : scriptFromMessage(approachCell);
-      }
-      if (approachCell && !isMissingValue(approachCell) && scriptSteps.length) {
-        scriptSteps = normalizeScriptSteps(scriptSteps);
-        scriptSteps[0].text = approachCell;
+        const fallbackMessage = approachCell || legacyMessage;
+        if (fallbackMessage && !isMissingValue(fallbackMessage)) {
+          scriptSteps = looksLikeScript(fallbackMessage) ? parseScriptCell(fallbackMessage) : scriptFromMessage(fallbackMessage);
+        }
       }
       parsed.push({
         id: uid(), name: name, phone: val("phone"), googleUrl: val("googleUrl"), category: val("category") || state.promptCategory,
         location: val("location") || state.promptLocation, reviews: val("reviews"), rating: val("rating"),
-        competitor: val("competitor"), competitorReviews: val("competitorReviews"),
-        message: (scriptSteps[0] && scriptSteps[0].text) || approachCell, notes: "", source: "Pesquisa online", status: "Novo",
+        competitor: val("competitor"), competitorReviews: val("competitorReviews"), approach: approachValue,
+        message: (scriptSteps[0] && scriptSteps[0].text) || approachValue || legacyMessage, notes: "", source: "Pesquisa online", status: "Novo",
         script: scriptSteps,
         statusHistory: [{ at: new Date().toISOString(), from: "", to: "Novo" }],
         createdAt: new Date().toISOString()
@@ -1461,7 +1549,10 @@
   }
   function importFieldValue(record, key) {
     if (key === "script") return scriptStepsText(record ? record.script : "");
-    if (key === "approach") return firstScriptText(record);
+    if (key === "approach") {
+      const explicit = record && typeof record.approach === "string" ? record.approach.trim() : "";
+      return explicit || firstScriptText(record);
+    }
     return record ? record[key] : "";
   }
   function approachText(record) {
@@ -1477,6 +1568,7 @@
     } else {
       lead.script = scriptFromMessage(text);
     }
+    lead.approach = text;
     lead.message = text;
   }
   function cloneScriptSteps(value) {
@@ -1498,6 +1590,7 @@
     return choices;
   }
   function setImportChoices(item, mode, target) {
+    item.touched = {};
     importFields.forEach(function (field) {
       const key = field[0];
       const currentOk = meaningfulImportValue(importFieldValue(target, key));
@@ -1518,6 +1611,12 @@
       if (!meaningfulImportValue(currentValue)) return true;
       return !importFieldEqual(key, currentValue, incomingValue);
     });
+  }
+  function appliedImportKeys(item) {
+    const keys = importIncomingKeys(item);
+    return keys.indexOf("script") >= 0 && keys.indexOf("approach") >= 0
+      ? keys.filter(function (key) { return key !== "approach"; })
+      : keys;
   }
   function findDuplicateTargets(incoming, pool, type) {
     return pool.map(function (lead) {
@@ -1553,7 +1652,7 @@
       const otherValue = importFieldValue(otherLead, key);
       fields[key] = meaningfulImportValue(baseValue) ? side : (meaningfulImportValue(otherValue) ? otherSide : side);
     });
-    return { base: side, fields: fields };
+    return { base: side, fields: fields, touched: {} };
   }
   function mergeSelectionFor(pair) {
     const key = pairKey(pair);
@@ -1562,6 +1661,7 @@
       mergeFields.forEach(function (field) {
         if (!current.fields[field[0]]) current.fields[field[0]] = current.base;
       });
+      current.touched = current.touched || {};
       return current;
     }
     const selection = defaultMergeSelection(pair, defaultMergeBase(pair.first, pair.second));
@@ -1760,8 +1860,11 @@
       if (meaningfulImportValue(importFieldValue(source, key))) baseLead[key] = source[key];
     });
     const approach = approachText(approachSource);
-    if (approach) setLeadApproach(baseLead, approach);
+    const otherSide = selection.base === "first" ? "second" : "first";
+    const scriptFromOther = selection.fields.script === otherSide;
+    if (approach && (!scriptFromOther || (selection.touched && selection.touched.approach))) setLeadApproach(baseLead, approach);
     baseLead.script = normalizeScriptSteps(baseLead.script);
+    baseLead.approach = firstScriptText(baseLead);
     baseLead.message = (baseLead.script[0] && baseLead.script[0].text) || "";
   }
   function unifyExistingPair(key, deleteOther) {
@@ -1831,7 +1934,7 @@
       }).join("") + '</fieldset>'
       : '<div class="dup-targets-single">Comparando com <strong>' + escapeHtml(chosen.lead.name || "Lead sem nome") + '</strong><small>' + escapeHtml(chosen.reasons.join(" · ")) + ' · ' + escapeHtml(duplicateStatus(chosen.lead)) + '</small></div>';
     const rows = importFields.map(function (field) { return importFieldRowMarkup(item, index, field); }).filter(Boolean).join("");
-    const changeCount = importIncomingKeys(item).length;
+    const changeCount = appliedImportKeys(item).length;
     return '<article class="duplicate-card dup-card">' +
       '<div class="duplicate-card-heading"><div><strong>Importado: ' + escapeHtml(incoming.name || "Comércio sem nome") + '</strong><small>' + escapeHtml(incoming.phone || "Sem telefone informado") + '</small></div><span class="duplicate-match-badge">Possível duplicado</span></div>' +
       targetOptions +
@@ -1844,7 +1947,7 @@
   function renderDuplicateReview() {
     if (!pendingImport) return;
     const duplicateCount = pendingImport.duplicates.length;
-    const updatesCount = pendingImport.duplicates.filter(function (item) { return importIncomingKeys(item).length > 0; }).length;
+    const updatesCount = pendingImport.duplicates.filter(function (item) { return appliedImportKeys(item).length > 0; }).length;
     const addedCount = pendingImport.addedCount;
     $("#duplicateSummary").innerHTML = '<strong>' + duplicateCount + ' possível(is) duplicado(s)</strong>' +
       '<span class="duplicate-summary-detail">' + addedCount + ' lead(s) novo(s) já adicionado(s). ' + updatesCount + ' ficha(s) com dados escolhidos para atualizar; status, observações e lembretes serão preservados.</span>';
@@ -1871,6 +1974,7 @@
       } else staged.push(lead);
     });
     if (staged.length) {
+      staged.forEach(function (lead) { delete lead.approach; });
       state.leads = state.leads.concat(staged);
       saveState();
       renderLeads();
@@ -1904,7 +2008,7 @@
     $("#importStatus").classList.remove("error-text");
   }
   function applyImportChoices(lead, item) {
-    const keys = importIncomingKeys(item);
+    const keys = appliedImportKeys(item);
     const scriptSelected = keys.indexOf("script") >= 0;
     const approachSelected = keys.indexOf("approach") >= 0;
     const currentApproach = approachText(lead);
@@ -1916,11 +2020,12 @@
       const steps = cloneScriptSteps(item.incoming.script);
       if (steps.length) lead.script = steps;
     }
-    if (scriptSelected && !approachSelected && currentApproach) setLeadApproach(lead, currentApproach);
-    if (approachSelected) {
+    if (scriptSelected && item.choices.approach === "current" && currentApproach && item.touched && item.touched.approach) setLeadApproach(lead, currentApproach);
+    if (!scriptSelected && approachSelected) {
       const approach = approachText(item.incoming);
       if (approach) setLeadApproach(lead, approach);
     }
+    if (scriptSelected || approachSelected) lead.approach = firstScriptText(lead);
     lead.script = normalizeScriptSteps(lead.script);
     lead.message = (lead.script[0] && lead.script[0].text) || "";
   }
@@ -1932,7 +2037,7 @@
     let fieldCount = 0;
     pendingImport.duplicates.forEach(function (item) {
       const target = selectedImportTarget(item);
-      const keys = importIncomingKeys(item);
+      const keys = appliedImportKeys(item);
       const current = target ? state.leads.find(function (lead) { return lead.id === target.id; }) : null;
       if (!current || !keys.length) return;
       applyImportChoices(current, item);
@@ -2323,6 +2428,7 @@
       if (pair) {
         const selection = mergeSelectionFor(pair);
         selection.fields[fieldRadio.dataset.mergeKey] = fieldRadio.dataset.mergeSource;
+        selection.touched[fieldRadio.dataset.mergeKey] = true;
         renderExistingDuplicateAnalysis();
       }
     }
@@ -2332,6 +2438,15 @@
   $("#importLeads").addEventListener("click", importTable);
   $("#cancelImportReview").addEventListener("click", cancelImportReview);
   $("#applyImport").addEventListener("click", applyImportReview);
+  $("#duplicateReview").addEventListener("click", function (event) {
+    const bulk = event.target.closest("[data-import-bulk]");
+    if (!bulk || !pendingImport) return;
+    pendingImport.duplicates.forEach(function (item) {
+      const target = selectedImportTarget(item);
+      if (target) setImportChoices(item, bulk.dataset.importBulk, target.lead);
+    });
+    renderDuplicateReview();
+  });
   $("#duplicateList").addEventListener("click", function (event) {
     const quick = event.target.closest("[data-duplicate-quick]");
     if (quick && pendingImport) {
@@ -2353,6 +2468,7 @@
         duplicate.selectedType = target.type;
         duplicate.selectedId = target.id;
         duplicate.choices = defaultImportChoices(duplicate.incoming, target.lead);
+        duplicate.touched = {};
         renderDuplicateReview();
       }
       return;
@@ -2362,6 +2478,8 @@
       const duplicate = pendingImport.duplicates[Number(choice.dataset.duplicateChoice)];
       if (duplicate) {
         duplicate.choices[choice.dataset.duplicateKey] = choice.value;
+        duplicate.touched = duplicate.touched || {};
+        duplicate.touched[choice.dataset.duplicateKey] = true;
         renderDuplicateReview();
       }
     }

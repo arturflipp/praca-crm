@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
   <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=25" defer></script>
+  <script src="app.js?v=26" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -112,6 +112,12 @@
 | Barbearia Exemplo | 13999990000 | não encontrado | 31 | 4,8 | Barbearia Centro | 280 | Oi, tudo bem?... | 1. Primeira mensagem: ... ### 2. ... |"></textarea>
           <section id="duplicateReview" class="duplicate-review hidden" aria-live="polite">
             <div id="duplicateSummary" class="duplicate-summary"></div>
+            <div class="dup-bulk-actions">
+              <span>Para todos os duplicados:</span>
+              <button class="dup-quick" type="button" data-import-bulk="keep">Manter todos</button>
+              <button class="dup-quick" type="button" data-import-bulk="fill">Completar todos os vazios</button>
+              <button class="dup-quick" type="button" data-import-bulk="all">Usar tudo da tabela em todos</button>
+            </div>
             <div id="duplicateList" class="duplicate-list"></div>
             <div class="duplicate-actions"><button class="button button-secondary" id="cancelImportReview" type="button">Ignorar duplicados</button><button class="button button-primary" id="applyImport" type="button">Aplicar campos escolhidos</button></div>
           </section>
