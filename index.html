@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <title>Praça CRM — Prospecção local</title>
-  <link rel="stylesheet" href="styles.css?v=26">
-  <script src="supabase-config.js?v=1"></script>
-  <script src="app.js?v=26" defer></script>
+  <link rel="stylesheet" href="styles.css?v=29">
+  <script src="supabase-config.js"></script>
+  <script src="app.js?v=29" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -35,6 +35,8 @@
         <button class="nav-item" data-view="crm"><span class="nav-icon">▤</span><span>Leads</span><span id="leadCountBadge" class="nav-count">0</span></button>
         <button class="nav-item" data-view="agenda"><span class="nav-icon">▦</span><span>Lembretes</span><span id="reminderCountBadge" class="nav-count">0</span></button>
         <button class="nav-item" data-view="reports"><span class="nav-icon">▥</span><span>Relatórios</span></button>
+        <button class="nav-item" data-view="models"><span class="nav-icon">✎</span><span>Modelos</span></button>
+        <button class="nav-item" data-view="review"><span class="nav-icon">★</span><span>Avaliação</span></button>
       </nav>
       <div class="sidebar-bottom">
         <div class="local-note"><span class="status-dot"></span><div><strong id="sidebarSyncTitle">Conectando</strong><small id="sidebarSyncDetail">Preparando sua conta</small></div></div>
@@ -189,6 +191,106 @@
           <div class="recent-sales" id="recentSales"></div>
         </section>
       </section>
+
+      <section class="page-view" id="view-models">
+        <div class="page-heading crm-heading">
+          <div><div class="eyebrow">FERRAMENTA · PROMPTS</div><h1>Modelos de prompt</h1><p>Edite o texto usado para gerar os prompts de cada lead. Os dados do lead entram no lugar dos tokens.</p></div>
+        </div>
+        <div class="models-layout">
+          <section class="panel models-panel">
+            <div class="models-tabs" role="tablist" aria-label="Modelos">
+              <button class="models-tab active" data-model-tab="site" role="tab" aria-selected="true">Site completo</button>
+              <button class="models-tab" data-model-tab="bio" role="tab" aria-selected="false">Bio site</button>
+              <button class="models-tab" data-model-tab="image" role="tab" aria-selected="false">Atualização de imagens</button>
+            </div>
+            <div class="models-editor-head">
+              <span class="section-label">TEXTO DO MODELO</span>
+              <span id="modelsSaveState" class="models-save-state">Salvo</span>
+            </div>
+            <label class="sr-only" for="modelsEditor">Texto do modelo</label>
+            <textarea id="modelsEditor" class="models-editor" spellcheck="false"></textarea>
+            <p id="modelsTokenWarning" class="models-token-warning hidden" role="status"></p>
+            <div class="models-tokens">
+              <div class="section-label">TOKENS DISPONÍVEIS</div>
+              <p class="models-help">Clique para inserir na posição do cursor. O token é substituído pelos dados do lead na hora de gerar.</p>
+              <div id="modelsTokenList" class="token-list"></div>
+            </div>
+            <div class="models-actions">
+              <button class="button button-danger" type="button" id="modelsRestore">Restaurar padrão</button>
+              <span class="footer-spacer"></span>
+              <button class="button button-secondary" type="button" id="modelsDiscard">Descartar</button>
+              <button class="button button-primary" type="button" id="modelsSave">Salvar modelo</button>
+            </div>
+          </section>
+          <aside class="panel models-preview-panel">
+            <div class="models-preview-head">
+              <div><h2>Prévia</h2><p>Veja como o prompt sai com os dados de um lead.</p></div>
+              <label class="toolbar-select">Lead<select id="modelsPreviewLead"><option value="">Lead de exemplo</option></select></label>
+            </div>
+            <label class="sr-only" for="modelsPreviewText">Prévia do prompt</label>
+            <textarea id="modelsPreviewText" class="models-preview-text" readonly spellcheck="false"></textarea>
+            <div class="models-preview-actions">
+              <button class="button button-secondary" type="button" id="modelsCopyPreview">Copiar prévia</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="page-view" id="view-review">
+        <div class="page-heading crm-heading">
+          <div><div class="eyebrow">FERRAMENTA · AVALIAÇÃO</div><h1>Gerador de link de avaliação</h1><p>Cole o link do comércio no Google Maps e crie o link que abre direto a avaliação.</p></div>
+        </div>
+        <div class="review-layout">
+          <section class="panel review-panel">
+            <div class="panel-heading"><div><span class="step-badge">1</span><div><h2>Link do comércio</h2><p>Use a URL completa do Maps, um link curto, um Place ID ou um link de avaliação.</p></div></div></div>
+            <label class="review-input-label">Link ou identificador do Google
+              <input id="reviewInput" placeholder="https://www.google.com/maps/place/... ou ChIJ..." autocomplete="off" spellcheck="false">
+            </label>
+            <p class="review-help">No computador, abra o comércio no Google Maps e copie a URL da barra de endereços. Links curtos também são aceitos.</p>
+            <div class="review-actions">
+              <button class="button button-primary" type="button" id="reviewGenerate">Gerar link de avaliação</button>
+              <button class="button button-secondary" type="button" id="reviewClear">Limpar</button>
+            </div>
+            <p id="reviewStatus" class="review-status" role="status" aria-live="polite"></p>
+            <div id="reviewRecovery" class="review-recovery hidden">
+              <strong>O Google não liberou a leitura automática deste link.</strong>
+              <p>Abra o link abaixo, copie a URL final do Maps e cole aqui para gerar o link de avaliação.</p>
+              <button class="button button-secondary" type="button" id="reviewRecoveryOpen">Abrir link no Google Maps</button>
+              <label>URL final do Maps<input id="reviewResolvedInput" placeholder="https://www.google.com/maps/place/..." spellcheck="false"></label>
+              <div class="review-recovery-actions">
+                <button class="button button-secondary" type="button" id="reviewPaste">Colar URL copiada</button>
+                <button class="button button-primary" type="button" id="reviewResolvedGenerate">Gerar com esta URL</button>
+              </div>
+            </div>
+            <p class="review-privacy">Links curtos podem usar um leitor externo para abrir o Maps; apenas a URL pública do comércio é enviada. Nenhum dado do lead é enviado.</p>
+          </section>
+          <section class="panel review-result-panel">
+            <div id="reviewEmpty" class="review-empty">
+              <div class="empty-illustration">★</div>
+              <h3>Seu link aparece aqui</h3>
+              <p>Cole o link de um comércio para gerar o endereço que leva direto ao formulário de avaliação do Google.</p>
+            </div>
+            <div id="reviewResult" class="hidden">
+              <div class="review-result-head">
+                <span class="section-label">LINK PRONTO</span>
+                <span id="reviewResultSource" class="review-result-source"></span>
+              </div>
+              <h3 id="reviewResultName">Comércio identificado</h3>
+              <label>Link de avaliação<textarea id="reviewResultLink" rows="3" readonly spellcheck="false"></textarea></label>
+              <div class="review-result-actions">
+                <button class="button button-primary" type="button" id="reviewCopy">Copiar link</button>
+                <a class="button button-secondary" id="reviewOpen" target="_blank" rel="noreferrer">Abrir avaliação</a>
+                <a class="button button-secondary" id="reviewMaps" target="_blank" rel="noreferrer">Ver no Maps</a>
+              </div>
+              <div class="review-place-id"><span>Place ID</span><code id="reviewResultPlaceId"></code></div>
+              <div class="review-save" id="reviewSave">
+                <label>Salvar no lead<select id="reviewLeadSelect"><option value="">Selecione um lead</option></select></label>
+                <button class="button button-secondary" type="button" id="reviewSaveLead">Salvar link no lead</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -200,6 +302,7 @@
         <div class="lead-quick-actions" id="leadQuickActions">
           <a class="quick-chip hidden" id="leadWhatsApp" target="_blank" rel="noreferrer"><span aria-hidden="true">✆</span> Abrir WhatsApp</a>
           <a class="quick-chip hidden" id="leadGoogleProfile" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">⌖</span> Ficha no Google</a>
+          <button class="quick-chip hidden" type="button" id="leadSitePrompt"><span aria-hidden="true">✳</span> Gerar prompt do site</button>
           <button class="quick-chip hidden" type="button" id="addReminderForLead"><span aria-hidden="true">＋</span> Novo lembrete</button>
         </div>
         <section class="form-section">
@@ -219,6 +322,14 @@
             <label>Nota média<input id="leadRating" inputmode="decimal" placeholder="Ex.: 4,8"></label>
             <label>Concorrente<input id="leadCompetitor" placeholder="Nome do concorrente"></label>
             <label>Avaliações do concorrente<input id="leadCompetitorReviews" inputmode="numeric" placeholder="Ex.: 280"></label>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-title">Presença online</div>
+          <div class="form-grid two-col">
+            <label>Instagram (@perfil ou link)<input id="leadInstagram" placeholder="Ex.: @barbeariacentro"></label>
+            <label>Site atual<input id="leadWebsite" inputmode="url" placeholder="https://..."></label>
+            <label class="span-two">Link de avaliação do Google<input id="leadReviewUrl" inputmode="url" placeholder="https://g.page/r/.../review"></label>
           </div>
         </section>
         <section class="form-section">
@@ -289,6 +400,36 @@
         <p class="calendar-reminder-help" id="calendarReminderHelp">Ao salvar um novo lembrete, o Google Calendar abrirá o evento preenchido. Revise e confirme em Salvar.</p>
       </div></div>
       <div class="modal-footer"><button class="button button-danger hidden" type="button" id="deleteReminder">Excluir</button><span class="footer-spacer"></span><button class="button button-secondary" type="button" data-close="reminderDialog">Cancelar</button><button class="button button-primary" type="submit">Salvar lembrete</button></div>
+    </form>
+  </dialog>
+  <dialog id="sitePromptDialog" class="modal modal-wide">
+    <form id="sitePromptForm" method="dialog">
+      <div class="modal-header"><div><div class="eyebrow">GERAR PROMPT</div><h2 id="sitePromptTitle">Prompt do site</h2></div><button class="icon-button" type="button" data-close="sitePromptDialog" aria-label="Fechar">×</button></div>
+      <div class="modal-body">
+        <p class="site-prompt-help">Confira os links. Eles são salvos no lead e entram no prompt. A IA externa vai pesquisar o Google e o Instagram para criar o site; este CRM só monta o pedido.</p>
+        <div class="site-prompt-tabs" role="tablist" aria-label="Prompt">
+          <button class="site-prompt-tab active" data-site-tab="site" role="tab" aria-selected="true">Site completo</button>
+          <button class="site-prompt-tab" data-site-tab="bio" role="tab" aria-selected="false">Bio site</button>
+          <button class="site-prompt-tab" data-site-tab="image" role="tab" aria-selected="false">Atualização de imagens</button>
+        </div>
+        <div class="form-grid two-col">
+          <label class="span-two">Ficha no Google<input id="siteLinkGoogle" inputmode="url" placeholder="https://maps.app.goo.gl/..."></label>
+          <label class="span-two">Link de avaliação do Google<input id="siteLinkReview" inputmode="url" placeholder="https://g.page/r/.../review"></label>
+          <label>WhatsApp com DDD<input id="siteLinkPhone" inputmode="tel" placeholder="13999990000"></label>
+          <label>Instagram (@perfil ou link)<input id="siteLinkInstagram" placeholder="@barbeariacentro"></label>
+          <label class="span-two">Site atual<input id="siteLinkWebsite" inputmode="url" placeholder="https://..."></label>
+          <label>Pasta do projeto<input id="siteLinkProjectFolder" placeholder="sites/nome-do-negocio"></label>
+          <label>Pasta de imagens<input id="siteLinkImagesFolder" placeholder="sites/nome-do-negocio/assets"></label>
+        </div>
+        <div class="site-extra-head"><span class="section-label">LINKS EXTRAS</span><button class="text-button" type="button" id="siteAddExtraLink">＋ Adicionar link</button></div>
+        <div id="siteExtraLinks" class="site-extra-links"></div>
+        <div class="site-prompt-preview">
+          <div class="site-prompt-preview-head"><div><span class="section-label">PROMPT GERADO</span><p id="sitePromptHint" class="models-help"></p></div></div>
+          <label class="sr-only" for="sitePromptText">Prompt gerado</label>
+          <textarea id="sitePromptText" class="models-preview-text" readonly spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="text-button" type="button" id="sitePromptEditModel">Editar modelo</button><span class="footer-spacer"></span><button class="button button-secondary" type="button" data-close="sitePromptDialog">Fechar</button><button class="button button-primary" type="button" id="sitePromptCopy">Copiar prompt</button></div>
     </form>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

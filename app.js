@@ -7,6 +7,10 @@
   const THEME_KEY = "praca-crm-theme-v1";
   const SYNC_META_PREFIX = "praca-crm-sync-v1:";
   const USER_STATE_PREFIX = "praca-crm-user-v1:";
+  const REVIEW_CACHE_KEY = "praca-crm-review-cache-v1";
+  const REVIEW_CACHE_TTL = 1000 * 60 * 60 * 24 * 30;
+  const REVIEW_REMOTE_ENDPOINT = "https://r.jina.ai/";
+  const REVIEW_REDIRECT_CHECKER = "https://api.redirect-checker.net/?url=";
   const supabaseConfig = window.PRACA_CRM_SUPABASE || {};
   let supabase = null;
   let supabaseReadyPromise = null;
@@ -72,6 +76,606 @@
     "Regras: use só dados que você encontrou na busca. Nunca invente número, telefone ou nome. Se não achar algum dado, escreva \"não encontrado\" na célula."
   ].join("\n");
 
+  const DEFAULT_SITE_PROMPT = `Você é um designer e desenvolvedor web especializado em sites para negócios locais. Crie um site completo, moderno, rápido e responsivo para o comércio abaixo, usando os dados fornecidos e pesquisando o que faltar.
+
+## 1. DADOS DO NEGÓCIO
+{{DADOS_JSON}}
+
+## 2. PESQUISA OBRIGATÓRIA
+Use seu MCP de navegador (Chrome DevTools ou a ferramenta de navegação disponível) para abrir e ler:
+- Ficha no Google Maps: {{GOOGLE_MAPS}}
+- Instagram: {{INSTAGRAM_URL}}
+- Site atual, se existir: {{SITE_ATUAL}}
+
+O link do Google é a fonte principal. O Instagram é complementar. Se o MCP não estiver disponível, use busca na web e acesse as páginas públicas.
+
+Extraia e confirme:
+- Nome exato do negócio
+- Endereço completo
+- Horário de funcionamento
+- Serviços ou produtos principais
+- Diferenciais reais
+- Faixa de preço, se pública
+- Nota e número de avaliações
+- O que os clientes mais elogiam nas avaliações
+- Cores, logo e tom de voz da marca
+- Fotos reais disponíveis apenas como referência
+
+Regras:
+- Use somente informações públicas e verificáveis.
+- Não invente endereço, horário, preço, serviço, avaliação ou depoimento.
+- Se algo não for encontrado, escreva [CONFIRMAR: ...] no local e liste no relatório final.
+- Não copie textos do Instagram ou do Google literalmente; reescreva com suas palavras.
+
+## 3. OBJETIVO DO SITE
+Criar um site que:
+- Apresente o negócio em menos de 10 segundos.
+- Gere confiança com endereço, avaliações reais, fotos e horários.
+- Leve o visitante para o WhatsApp ou para avaliar no Google.
+- Funcione bem no celular.
+- Seja fácil de publicar e manter, com HTML, CSS e JS puro, sem build.
+
+## 4. ESTRUTURA OBRIGATÓRIA
+Use esta estrutura, nesta ordem:
+1. Cabeçalho fixo com logo ou nome, menu simples e botão de WhatsApp.
+2. Hero com foto principal, nome, categoria, cidade, frase curta e dois botões: WhatsApp e Como chegar.
+3. Sobre o negócio, com 2 a 3 parágrafos curtos.
+4. Serviços ou produtos em cards, com 4 a 8 itens.
+5. Diferenciais, com 3 a 5 itens e ícones simples.
+6. Galeria de fotos, com 6 a 12 imagens.
+7. Avaliações reais, com 3 a 6 trechos curtos, nome e nota, somente se existirem.
+8. Localização e horários, com endereço, mapa incorporado e horários.
+9. Chamada final para WhatsApp e para avaliar no Google.
+10. Rodapé com nome, endereço, telefone clicável, Instagram, links e ano.
+11. Botão flutuante de WhatsApp no celular.
+
+Não adicione seções extras sem necessidade. Não use carrossel automático, pop-up ou animação pesada.
+
+## 5. DESIGN
+- Mobile-first, responsivo de 320px a 1440px.
+- Use a paleta e a tipografia do nicho "{{CATEGORIA}}". Se o nicho não estiver na tabela, use a paleta padrão.
+- No máximo 2 fontes. Use fontes do sistema ou Google Fonts com fallback.
+- Contraste alto, textos legíveis e botões grandes no celular.
+- Use CSS variables para cores, espaçamento e tipografia.
+- Espaçamento consistente em múltiplos de 4 ou 8px.
+- Nada de texto sobre imagem sem contraste ou botões pequenos.
+
+Tabela de nichos:
+- Barbearia: fundo escuro carvão, dourado ou cobre, tipografia display forte.
+- Salão de beleza: tons claros, rosé ou dourado, tipografia elegante.
+- Restaurante: tons quentes como vermelho, creme e marrom, fotos grandes.
+- Clínica ou odontologia: branco, azul ou verde suave, tipografia limpa.
+- Pet: verde ou azul alegre, formas arredondadas, tom divertido.
+- Academia: preto ou carvão, verde-limão ou laranja, tipografia forte.
+- Loja: neutro claro, cor de destaque da marca, cards de produto.
+- Padrão: verde escuro, creme e branco, tipografia sóbria.
+
+## 6. CONTEÚDO E TOM
+- Português do Brasil, claro e direto.
+- Fale com o cliente do comércio, não com o dono.
+- Destaque benefícios reais, não adjetivos vazios.
+- Não prometa resultados, não invente números e não use "o melhor da cidade" sem fonte.
+- Use o nome do negócio e a cidade nas primeiras frases.
+- Evite textos longos: no máximo 3 parágrafos por seção.
+
+## 7. LINKS E BOTÕES
+- WhatsApp: {{WHATSAPP_LINK}} com mensagem neutra, sem script de vendas.
+- Avaliar no Google: {{REVIEW_LINK}}
+- Google Maps: {{GOOGLE_MAPS}}
+- Instagram: {{INSTAGRAM_URL}}
+- Site atual: {{SITE_ATUAL}}
+- Links extras: {{LINKS_EXTRAS}}
+- Se um link estiver vazio ou "não informado", não crie botão quebrado. Omita o botão ou use o link do Maps quando fizer sentido.
+- O botão de WhatsApp deve estar no cabeçalho, no hero e no final.
+- O botão Avaliar no Google deve aparecer pelo menos no final e na seção de avaliações.
+
+## 8. IMAGENS
+- Use apenas imagens fornecidas por mim na pasta {{PASTA_IMAGENS}}.
+- Não baixe, não copie e não use hotlink de imagens do Google Maps ou do Instagram.
+- Se a pasta estiver vazia ou indisponível, use placeholders locais com fundo neutro e o texto "Foto do negócio".
+- Crie uma lista de imagens necessárias com nome do arquivo, seção, proporção e texto alternativo.
+- Toda imagem precisa de alt descritivo, width, height e loading="lazy", exceto a do hero.
+- Otimize para WebP quando possível, sem perder qualidade.
+
+## 9. SEO, ACESSIBILIDADE E PERFORMANCE
+- Title e meta description com nome, categoria e cidade.
+- Open Graph e Twitter Card.
+- JSON-LD LocalBusiness com nome, endereço, telefone, horário, sameAs para Instagram e Google Maps, e aggregateRating somente se verificado.
+- HTML semântico, foco visível, labels e contraste adequado.
+- Não use bibliotecas pesadas. Se precisar de JS, use no máximo um arquivo pequeno.
+- Meta viewport, favicon e canonical.
+- O site deve funcionar ao abrir localmente.
+
+## 10. ENTREGA
+Crie os arquivos em {{PASTA_PROJETO}}:
+- index.html
+- styles.css
+- assets/ com imagens e ícones
+- README.md com instruções para abrir, editar e publicar
+
+Regras:
+- Não altere arquivos fora dessa pasta.
+- Não publique, não faça deploy e não envie nada para a internet.
+- Não use backend, banco de dados, login ou variáveis secretas.
+- Não inclua o nome do meu CRM nem a venda de placas NFC.
+- Se faltar alguma informação essencial, use [CONFIRMAR: ...] e siga com o restante.
+
+## 11. RELATÓRIO FINAL
+Ao terminar, entregue:
+1. Resumo do que foi criado.
+2. Dados encontrados no Google e no Instagram, com as fontes.
+3. Dados não encontrados ou que precisam de confirmação.
+4. Lista de imagens necessárias e onde cada uma entra.
+5. Como abrir o site localmente.
+6. Como publicar no Netlify Drop, Vercel ou GitHub Pages.
+7. O que eu devo revisar antes de publicar.`;
+
+  const DEFAULT_BIO_PROMPT = `Você é um designer e desenvolvedor web especializado em bio sites, no estilo link na bio, para negócios locais. Crie uma página única, moderna, rápida e mobile-first para o comércio abaixo.
+
+## 1. DADOS DO NEGÓCIO
+{{DADOS_JSON}}
+
+## 2. PESQUISA OBRIGATÓRIA
+Use seu MCP de navegador para abrir:
+- Google Maps: {{GOOGLE_MAPS}}
+- Instagram: {{INSTAGRAM_URL}}
+- Site atual: {{SITE_ATUAL}}
+
+Confirme nome, categoria, endereço, horário, telefone, nota, avaliações, serviços principais, cores e tom da marca. Não invente nada. Se faltar, use [CONFIRMAR: ...].
+
+## 3. ESTRUTURA OBRIGATÓRIA
+Página única, nesta ordem:
+1. Topo com logo ou foto principal, nome, categoria e uma frase curta.
+2. Botões grandes, um abaixo do outro:
+   - WhatsApp
+   - Avaliar no Google
+   - Como chegar no Google Maps
+   - Instagram
+   - Site, se existir
+   - Links extras
+3. Bloco curto "Sobre", com 2 a 3 linhas.
+4. Serviços principais em lista curta, se fizer sentido.
+5. Horário de funcionamento, se confirmado.
+6. Rodapé com nome, cidade e ano.
+
+Não adicione menu, carrossel, pop-up ou várias páginas.
+
+## 4. DESIGN
+- Mobile-first, largura máxima de 520px, centralizado no desktop.
+- Use a paleta e a tipografia do nicho "{{CATEGORIA}}". Padrão: verde escuro, creme e branco.
+- Botões com no mínimo 48px de altura, contraste alto e ícones simples.
+- No máximo 2 fontes. Use CSS variables. Sem bibliotecas pesadas.
+- Visual limpo, com bastante espaço em branco.
+
+## 5. LINKS E AÇÕES
+- WhatsApp: {{WHATSAPP_LINK}} com mensagem neutra.
+- Avaliar no Google: {{REVIEW_LINK}}
+- Google Maps: {{GOOGLE_MAPS}}
+- Instagram: {{INSTAGRAM_URL}}
+- Site: {{SITE_ATUAL}}
+- Links extras: {{LINKS_EXTRAS}}
+- Se um link estiver vazio, omita o botão. Não crie link quebrado.
+
+## 6. IMAGENS
+- Use apenas imagens da pasta {{PASTA_IMAGENS}}.
+- Não baixe nem use hotlink do Google ou do Instagram.
+- Se não houver imagem, use um placeholder neutro com a inicial do negócio.
+- Use alt descritivo e otimize para WebP.
+
+## 7. SEO E ACESSIBILIDADE
+- Title e meta description com nome, categoria e cidade.
+- Open Graph com imagem.
+- JSON-LD LocalBusiness.
+- HTML semântico, foco visível e contraste adequado.
+
+## 8. ENTREGA
+Crie em {{PASTA_PROJETO}}:
+- index.html
+- styles.css
+- assets/
+- README.md
+
+Não altere outros arquivos. Não publique. Sem backend e sem segredos. Não inclua o meu CRM nem a venda de placas NFC.
+
+## 9. RELATÓRIO FINAL
+Liste o que foi criado, os dados encontrados, os dados a confirmar, as imagens necessárias e como publicar.`;
+
+  const DEFAULT_IMAGE_PROMPT = `Você já criou o site em {{PASTA_PROJETO}}. Agora atualize apenas as imagens.
+
+## 1. PASTA DAS IMAGENS
+As imagens estão em: {{PASTA_IMAGENS}}
+
+## 2. O QUE FAZER
+1. Liste os arquivos da pasta.
+2. Identifique o conteúdo de cada imagem: logo, fachada, interior, equipe, produto, serviço, antes e depois.
+3. Substitua os placeholders e as imagens atuais pelas imagens correspondentes.
+4. Se houver imagens extras, adicione à galeria sem quebrar o layout.
+5. Mantenha a proporção, o enquadramento e a qualidade.
+6. Otimize para WebP quando possível.
+7. Atualize o alt de cada imagem com uma descrição real.
+8. Atualize o README com a lista de imagens usadas.
+
+## 3. REGRAS
+- Não altere textos, links, layout, cores ou fontes.
+- Não remova seções.
+- Não baixe imagens do Google ou do Instagram.
+- Se faltar alguma imagem, mantenha o placeholder e liste o que falta.
+- Não publique e não faça deploy.
+
+## 4. RELATÓRIO
+Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
+
+  const PROMPT_TEMPLATE_KINDS = ["site", "bio", "image"];
+  const PROMPT_TEMPLATE_DEFAULTS = { site: DEFAULT_SITE_PROMPT, bio: DEFAULT_BIO_PROMPT, image: DEFAULT_IMAGE_PROMPT };
+  const PROMPT_TEMPLATE_LABELS = { site: "Site completo", bio: "Bio site", image: "Atualização de imagens" };
+  const PROMPT_TEMPLATE_TOKENS = [
+    ["{{DADOS_JSON}}", "Bloco JSON com todos os dados do lead"],
+    ["{{NOME}}", "Nome do comércio"],
+    ["{{CATEGORIA}}", "Categoria do negócio"],
+    ["{{BAIRRO_CIDADE}}", "Bairro e cidade"],
+    ["{{TELEFONE}}", "Telefone com DDD"],
+    ["{{WHATSAPP_LINK}}", "Link do WhatsApp com mensagem neutra"],
+    ["{{GOOGLE_MAPS}}", "Link da ficha no Google Maps"],
+    ["{{INSTAGRAM}}", "Perfil informado do Instagram"],
+    ["{{INSTAGRAM_URL}}", "URL completa do Instagram"],
+    ["{{REVIEW_LINK}}", "Link para avaliar no Google"],
+    ["{{SITE_ATUAL}}", "Site atual do comércio"],
+    ["{{NOTA}}", "Nota média no Google"],
+    ["{{AVALIACOES}}", "Número de avaliações"],
+    ["{{LINKS_EXTRAS}}", "Lista de links extras"],
+    ["{{PASTA_PROJETO}}", "Pasta onde o site será criado"],
+    ["{{PASTA_IMAGENS}}", "Pasta das imagens"],
+    ["{{DATA}}", "Data de geração"]
+  ];
+  const PROMPT_REQUIRED_TOKENS = {
+    site: ["{{DADOS_JSON}}", "{{CATEGORIA}}", "{{GOOGLE_MAPS}}", "{{PASTA_PROJETO}}"],
+    bio: ["{{DADOS_JSON}}", "{{CATEGORIA}}", "{{GOOGLE_MAPS}}", "{{PASTA_PROJETO}}"],
+    image: ["{{PASTA_PROJETO}}", "{{PASTA_IMAGENS}}"]
+  };
+  const SAMPLE_LEAD = {
+    id: "__sample__",
+    name: "Barbearia Exemplo",
+    category: "Barbearia",
+    location: "Centro, Santos",
+    phone: "13999990000",
+    googleUrl: "https://maps.app.goo.gl/exemplo",
+    instagram: "@barbeariaexemplo",
+    reviewUrl: "https://search.google.com/local/writereview?placeid=EXEMPLO",
+    website: "https://barbeariaexemplo.com.br",
+    rating: "4,8",
+    reviews: "127",
+    links: [{ label: "Tabela de preços", url: "https://barbeariaexemplo.com.br/precos" }],
+    siteProjectFolder: "sites/barbearia-exemplo",
+    siteImagesFolder: "sites/barbearia-exemplo/assets"
+  };
+
+  function defaultPromptTemplates() {
+    const templates = {};
+    PROMPT_TEMPLATE_KINDS.forEach(function (key) {
+      templates[key] = { text: PROMPT_TEMPLATE_DEFAULTS[key], updatedAt: "" };
+    });
+    return templates;
+  }
+  function normalizePromptTemplates(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const templates = {};
+    PROMPT_TEMPLATE_KINDS.forEach(function (key) {
+      const item = source[key];
+      if (item && typeof item === "object" && typeof item.text === "string" && item.text.trim()) {
+        templates[key] = { text: item.text, updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : "" };
+      } else if (typeof item === "string" && item.trim()) {
+        templates[key] = { text: item, updatedAt: "" };
+      } else {
+        templates[key] = { text: PROMPT_TEMPLATE_DEFAULTS[key], updatedAt: "" };
+      }
+    });
+    return templates;
+  }
+  function mergePromptTemplates(localTemplates, remoteTemplates) {
+    const local = normalizePromptTemplates(localTemplates);
+    const remote = normalizePromptTemplates(remoteTemplates);
+    const merged = {};
+    PROMPT_TEMPLATE_KINDS.forEach(function (key) {
+      const localAt = Date.parse(local[key].updatedAt || "") || 0;
+      const remoteAt = Date.parse(remote[key].updatedAt || "") || 0;
+      merged[key] = localAt > remoteAt ? local[key] : remote[key];
+    });
+    return merged;
+  }
+  function promptTemplateSignature(templates) {
+    const source = templates && typeof templates === "object" ? templates : {};
+    return PROMPT_TEMPLATE_KINDS.map(function (key) {
+      const item = source[key];
+      if (item && typeof item === "object") return String(item.text || "");
+      return typeof item === "string" ? item : "";
+    });
+  }
+  function promptTemplateText(kind) {
+    const templates = state.promptTemplates && typeof state.promptTemplates === "object" ? state.promptTemplates : null;
+    const item = templates ? templates[kind] : null;
+    return item && typeof item.text === "string" && item.text.trim() ? item.text : PROMPT_TEMPLATE_DEFAULTS[kind] || DEFAULT_SITE_PROMPT;
+  }
+  function slugify(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "site";
+  }
+  function normalizeUrlValue(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    if (/^https?:\/\//i.test(text)) return text;
+    if (/^[\w.-]+\.[a-z]{2,}(?:\/|$)/i.test(text)) return "https://" + text;
+    return text;
+  }
+  function instagramProfileUrl(value) {
+    let text = String(value || "").trim();
+    if (!text) return "";
+    if (/^https?:\/\//i.test(text)) return text;
+    if (/^(www\.)?instagram\.com\//i.test(text)) return "https://" + text.replace(/^\/+/, "");
+    text = text.replace(/^@+/, "").replace(/\/+$/, "");
+    if (!text) return "";
+    return "https://instagram.com/" + encodeURIComponent(text);
+  }
+  function siteWhatsAppHref(phone) {
+    const number = digits(phone);
+    if (!number) return "";
+    const international = number.indexOf("55") === 0 ? number : "55" + number;
+    return "https://wa.me/" + international + "?text=" + encodeURIComponent("Olá! Vim pelo site e gostaria de mais informações.");
+  }
+  function parseMapsHexPair(value) {
+    const match = String(value || "").trim().match(/^(0x[0-9a-f]{1,16}):(0x[0-9a-f]{1,16})$/i);
+    return match ? { a: match[1], b: match[2] } : null;
+  }
+  function hexToLittleEndianBytes(value) {
+    let number = BigInt(value);
+    const bytes = new Uint8Array(8);
+    for (let index = 0; index < 8; index += 1) {
+      bytes[index] = Number(number & 255n);
+      number >>= 8n;
+    }
+    return bytes;
+  }
+  function mapsHexPairToPlaceId(a, b) {
+    const bytes = new Uint8Array(20);
+    bytes[0] = 0x0a;
+    bytes[1] = 0x12;
+    bytes[2] = 0x09;
+    bytes.set(hexToLittleEndianBytes(a), 3);
+    bytes[11] = 0x11;
+    bytes.set(hexToLittleEndianBytes(b), 12);
+    let binary = "";
+    bytes.forEach(function (byte) { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function looksLikeGooglePlaceId(value) {
+    const text = String(value || "").trim();
+    if (!text || /\s/.test(text) || /^https?:\/\//i.test(text) || /^0x/i.test(text)) return false;
+    return /^ChIJ[A-Za-z0-9_-]{10,}$/.test(text) || /^Ci[A-Za-z0-9_-]{10,}$/.test(text) || /^[A-Za-z0-9_-]{20,}$/.test(text);
+  }
+  function mapsNameFromUrl(url) {
+    const match = url.pathname.match(/\/maps\/place\/([^/]+)/i);
+    if (match && match[1]) {
+      try { return decodeURIComponent(match[1].replace(/\+/g, " ")).trim(); } catch (_) { return match[1].trim(); }
+    }
+    const query = url.searchParams.get("q") || url.searchParams.get("query") || "";
+    if (query && !/^place_id:/i.test(query)) {
+      try { return decodeURIComponent(query.replace(/\+/g, " ")).trim(); } catch (_) { return query.trim(); }
+    }
+    return "";
+  }
+  function isShortMapsUrl(url) {
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    return host === "maps.app.goo.gl" || (host === "goo.gl" && /^\/maps(?:\/|$)/i.test(url.pathname));
+  }
+  function isGoogleMapsUrl(url) {
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "maps.app.goo.gl" || host === "goo.gl" || host === "g.page" || host === "maps.google.com") return true;
+    if (host === "search.google.com") return /\/local\/(?:writereview|reviews)/i.test(url.pathname);
+    return /(^|\.)google\.[a-z]{2,3}(?:\.[a-z]{2})?$/i.test(host) && /\/maps(?:\/|$)/i.test(url.pathname);
+  }
+  function extractMapsFeaturePair(text) {
+    const source = String(text || "");
+    const direct = source.match(/(?:!1s|ftid=)(0x[0-9a-f]{1,16}):(0x[0-9a-f]{1,16})/i);
+    if (direct) return { a: direct[1], b: direct[2] };
+    const general = source.match(/(0x[0-9a-f]{6,16}):(0x[0-9a-f]{6,16})/i);
+    return general ? { a: general[1], b: general[2] } : null;
+  }
+  function extractPlaceIdFromMapsInput(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    if (looksLikeGooglePlaceId(raw)) return { placeId: raw, name: "", source: "place-id" };
+    const rawPair = parseMapsHexPair(raw);
+    if (rawPair) return { placeId: mapsHexPairToPlaceId(rawPair.a, rawPair.b), name: "", source: "feature-id" };
+    let url;
+    try { url = new URL(/^https?:\/\//i.test(raw) ? raw : "https://" + raw); } catch (_) { return null; }
+    if (!isGoogleMapsUrl(url)) return null;
+    const placeParams = ["placeid", "place_id", "query_place_id"];
+    for (let index = 0; index < placeParams.length; index += 1) {
+      const key = placeParams[index];
+      const param = url.searchParams.get(key);
+      if (!param) continue;
+      const pair = parseMapsHexPair(param);
+      if (pair) return { placeId: mapsHexPairToPlaceId(pair.a, pair.b), name: mapsNameFromUrl(url), source: key === "placeid" ? "review-url" : "url" };
+      if (looksLikeGooglePlaceId(param)) return { placeId: param.trim(), name: mapsNameFromUrl(url), source: "url" };
+    }
+    const ftid = url.searchParams.get("ftid");
+    if (ftid) {
+      const pair = parseMapsHexPair(ftid);
+      if (pair) return { placeId: mapsHexPairToPlaceId(pair.a, pair.b), name: mapsNameFromUrl(url), source: "url" };
+    }
+    let decoded = "";
+    try { decoded = decodeURIComponent(url.pathname + url.search + url.hash); } catch (_) { decoded = url.pathname + url.search + url.hash; }
+    const pair = extractMapsFeaturePair(decoded);
+    if (pair) return { placeId: mapsHexPairToPlaceId(pair.a, pair.b), name: mapsNameFromUrl(url), source: "url" };
+    const query = url.searchParams.get("q") || url.searchParams.get("query") || "";
+    const queryPlace = query.match(/place_id\s*:\s*([A-Za-z0-9_-]+)/i);
+    if (queryPlace) return { placeId: queryPlace[1], name: mapsNameFromUrl(url), source: "url" };
+    if (/\/maps\/search\//i.test(url.pathname) || (!/\/maps\/place\//i.test(url.pathname) && /\/maps\/@/i.test(url.pathname))) {
+      return { placeId: "", name: mapsNameFromUrl(url), error: "Use a URL da ficha de um comércio, não uma busca do Google Maps." };
+    }
+    return { placeId: "", name: mapsNameFromUrl(url), unresolvedUrl: url.href, short: isShortMapsUrl(url), source: "unresolved" };
+  }
+  function reviewLinkForPlaceId(placeId) {
+    return placeId ? "https://search.google.com/local/writereview?placeid=" + encodeURIComponent(placeId) : "";
+  }
+  function googlePlaceId(value) {
+    const result = extractPlaceIdFromMapsInput(value);
+    return result && result.placeId ? result.placeId : "";
+  }
+  function googleReviewUrl(value) {
+    return reviewLinkForPlaceId(googlePlaceId(value));
+  }
+  function cleanMapsTitle(value) {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    if (!text || /^google maps$/i.test(text)) return "";
+    if (/^(?:https?:)?\/\//i.test(text) || /^0x[0-9a-f]+:/i.test(text) || /^ChIJ/i.test(text) || /%[0-9a-f]{2}/i.test(text)) return "";
+    return text.split(" · ")[0].trim();
+  }
+  function readReviewCache(url) {
+    if (!url) return null;
+    try {
+      const cache = JSON.parse(localStorage.getItem(REVIEW_CACHE_KEY) || "{}") || {};
+      const item = cache[url];
+      if (item && item.placeId && Date.now() - Number(item.at || 0) < REVIEW_CACHE_TTL) return item;
+    } catch (_) {}
+    return null;
+  }
+  function writeReviewCache(url, result) {
+    if (!url || !result || !result.placeId) return;
+    try {
+      const cache = JSON.parse(localStorage.getItem(REVIEW_CACHE_KEY) || "{}") || {};
+      cache[url] = { placeId: result.placeId, name: result.name || "", source: result.source || "resolved", at: Date.now() };
+      const keys = Object.keys(cache);
+      keys.forEach(function (key) {
+        if (!cache[key] || Date.now() - Number(cache[key].at || 0) > REVIEW_CACHE_TTL) delete cache[key];
+      });
+      const remaining = Object.keys(cache);
+      if (remaining.length > 80) {
+        remaining.sort(function (a, b) { return Number(cache[a].at || 0) - Number(cache[b].at || 0); })
+          .slice(0, remaining.length - 80)
+          .forEach(function (key) { delete cache[key]; });
+      }
+      localStorage.setItem(REVIEW_CACHE_KEY, JSON.stringify(cache));
+    } catch (_) {}
+  }
+  function reviewNameFromRedirect(value) {
+    const text = String(value || "").replace(/\\\//g, "/").replace(/&amp;/gi, "&");
+    const match = text.match(/\/maps\/place\/([^/@?]+)/i);
+    if (!match) return "";
+    try {
+      return cleanMapsTitle(decodeURIComponent(match[1].replace(/\+/g, " ")));
+    } catch (_) {
+      return cleanMapsTitle(match[1].replace(/\+/g, " "));
+    }
+  }
+  async function resolveReviewWithRemote(url) {
+    let target = url;
+    try {
+      const parsed = new URL(url);
+      if (isShortMapsUrl(parsed)) {
+        parsed.searchParams.set("_imcp", "1");
+        target = parsed.href;
+      }
+    } catch (_) {}
+    const checker = REVIEW_REDIRECT_CHECKER + encodeURIComponent(target);
+    const endpoint = REVIEW_REMOTE_ENDPOINT + checker;
+    const controller = new AbortController();
+    const timeout = setTimeout(function () { controller.abort(); }, 20000);
+    try {
+      const response = await fetch(endpoint, { headers: { Accept: "text/plain" }, signal: controller.signal });
+      if (!response.ok) return null;
+      const text = await response.text();
+      if (!text) return null;
+      const pair = extractMapsFeaturePair(text);
+      if (!pair) return null;
+      const redirect = text.match(/"redirect_url":"([^"]+)"/);
+      return { placeId: mapsHexPairToPlaceId(pair.a, pair.b), name: redirect ? reviewNameFromRedirect(redirect[1]) : "", source: "resolved" };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  async function resolveReviewInput(value) {
+    const direct = extractPlaceIdFromMapsInput(value);
+    if (!direct) return { error: "Cole um link do Google Maps ou um Place ID." };
+    if (direct.placeId || direct.reviewUrl) return direct;
+    if (direct.error) return direct;
+    const cached = readReviewCache(direct.unresolvedUrl);
+    if (cached) return Object.assign({}, direct, cached);
+    try {
+      const remote = await resolveReviewWithRemote(direct.unresolvedUrl);
+      if (remote) {
+        writeReviewCache(direct.unresolvedUrl, remote);
+        return Object.assign({}, direct, remote);
+      }
+    } catch (_) {}
+    return Object.assign({}, direct, { needsManual: true });
+  }
+  function cleanLinks(links) {
+    return (Array.isArray(links) ? links : []).filter(function (item) {
+      return item && typeof item === "object" && String(item.label || "").trim() && String(item.url || "").trim();
+    }).map(function (item) {
+      return { label: String(item.label).trim(), url: normalizeUrlValue(item.url) };
+    });
+  }
+  function formatExtraLinks(links) {
+    const valid = cleanLinks(links);
+    return valid.length ? valid.map(function (item) { return "- " + item.label + ": " + item.url; }).join("\n") : "nenhum";
+  }
+  function promptTokenValues(lead, options) {
+    const source = lead && typeof lead === "object" ? lead : SAMPLE_LEAD;
+    const settings = options && typeof options === "object" ? options : {};
+    const projectFolder = String(settings.projectFolder || source.siteProjectFolder || ("sites/" + slugify(source.name))).trim();
+    const imagesFolder = String(settings.imagesFolder || source.siteImagesFolder || (projectFolder + "/assets")).trim();
+    const whatsappLink = siteWhatsAppHref(source.phone);
+    const instagram = String(source.instagram || "").trim();
+    const instagramUrl = instagramProfileUrl(instagram);
+    const reviewLink = String(source.reviewUrl || "").trim() || googleReviewUrl(source.googleUrl);
+    const links = cleanLinks(source.links);
+    const data = {
+      nome: String(source.name || ""),
+      categoria: String(source.category || ""),
+      bairroCidade: String(source.location || ""),
+      telefone: String(source.phone || ""),
+      whatsapp: whatsappLink,
+      googleMaps: String(source.googleUrl || ""),
+      instagram: instagram,
+      instagramUrl: instagramUrl,
+      linkAvaliacao: reviewLink,
+      siteAtual: String(source.website || ""),
+      nota: String(source.rating || ""),
+      avaliacoes: String(source.reviews || ""),
+      linksExtras: links,
+      pastaProjeto: projectFolder,
+      pastaImagens: imagesFolder,
+      geradoEm: new Date().toISOString()
+    };
+    return {
+      DADOS_JSON: "````json\n" + JSON.stringify(data, null, 2) + "\n````",
+      NOME: data.nome || "não informado",
+      CATEGORIA: data.categoria || "não informado",
+      BAIRRO_CIDADE: data.bairroCidade || "não informado",
+      TELEFONE: data.telefone || "não informado",
+      WHATSAPP_LINK: whatsappLink || "não informado",
+      GOOGLE_MAPS: data.googleMaps || "não informado",
+      INSTAGRAM: instagram || "não informado",
+      INSTAGRAM_URL: instagramUrl || "não informado",
+      REVIEW_LINK: reviewLink || "não informado",
+      SITE_ATUAL: data.siteAtual || "não informado",
+      NOTA: data.nota || "não informado",
+      AVALIACOES: data.avaliacoes || "não informado",
+      LINKS_EXTRAS: formatExtraLinks(links),
+      PASTA_PROJETO: projectFolder,
+      PASTA_IMAGENS: imagesFolder,
+      DATA: new Date().toLocaleDateString("pt-BR")
+    };
+  }
+  function fillPromptTemplate(template, values) {
+    return String(template || "").replace(/\{\{([A-Z0-9_]+)\}\}/g, function (match, key) {
+      return Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match;
+    });
+  }
+  function buildPromptText(kind, template, lead, options) {
+    return fillPromptTemplate(template, promptTokenValues(lead, options));
+  }
+
   function promptTemplate(text, category, location) {
     let template = String(text || "");
     if (category) template = template.split(category).join("[CATEGORIA]");
@@ -99,7 +703,7 @@
   }
 
   function newState() {
-    return { promptCategory: "", promptLocation: "", promptText: defaultPrompt, promptBlocks: promptBlocksFromText(defaultPrompt), promptHistory: [], leads: [], reminders: [], sales: [], _promptUpdatedAt: "", _schemaVersion: SCHEMA_VERSION };
+    return { promptCategory: "", promptLocation: "", promptText: defaultPrompt, promptBlocks: promptBlocksFromText(defaultPrompt), promptHistory: [], leads: [], reminders: [], sales: [], promptTemplates: defaultPromptTemplates(), _promptUpdatedAt: "", _schemaVersion: SCHEMA_VERSION };
   }
   function localDateKey(value) {
     const date = value instanceof Date ? value : value ? new Date(value) : new Date();
@@ -252,6 +856,12 @@
   function migrateLead(lead) {
     if (!lead || typeof lead !== "object") return lead;
     if (lead.status === LEGACY_SOLD_STATUS) lead.status = SOLD_STATUS;
+    if (typeof lead.instagram !== "string") lead.instagram = "";
+    if (typeof lead.reviewUrl !== "string") lead.reviewUrl = "";
+    if (typeof lead.website !== "string") lead.website = "";
+    if (typeof lead.siteProjectFolder !== "string") lead.siteProjectFolder = "";
+    if (typeof lead.siteImagesFolder !== "string") lead.siteImagesFolder = "";
+    lead.links = cleanLinks(lead.links);
     if (!Array.isArray(lead.script) || !lead.script.length) lead.script = lead.message ? scriptFromMessage(lead.message) : defaultScriptFor(lead);
     else lead.script = normalizeScriptSteps(lead.script);
     lead.message = (lead.script[0] && lead.script[0].text) || "";
@@ -306,6 +916,7 @@
     const version = Number(data._schemaVersion) || 1;
     data.leads = Array.isArray(data.leads) ? data.leads.map(migrateLead) : [];
     data.sales = Array.isArray(data.sales) ? data.sales : [];
+    data.promptTemplates = normalizePromptTemplates(data.promptTemplates);
     if (Array.isArray(data.promptBlocks)) data.promptBlocks = migratePromptBlocks(data.promptBlocks);
     if (version < SCHEMA_VERSION) {
       const known = {};
@@ -353,6 +964,7 @@
         leads: Array.isArray(data.leads) ? data.leads : [],
         reminders: Array.isArray(data.reminders) ? data.reminders : [],
         sales: Array.isArray(data.sales) ? data.sales : [],
+        promptTemplates: normalizePromptTemplates(data.promptTemplates),
         _promptUpdatedAt: typeof data._promptUpdatedAt === "string" ? data._promptUpdatedAt : "",
         _schemaVersion: Number(data._schemaVersion) || 1
       };
@@ -391,6 +1003,15 @@
   let pendingSingleField = "";
   let saleExitDecision = "";
   let leadOpenedStatus = "";
+  let modelsTab = "site";
+  let modelsDirty = false;
+  let currentView = "prompt";
+  let sitePromptLeadId = "";
+  let sitePromptTab = "site";
+  let sitePromptDirty = false;
+  let reviewResultData = null;
+  let reviewPendingUrl = "";
+  let reviewBusy = false;
   const $ = (selector, root) => (root || document).querySelector(selector);
   const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
   function setTheme(theme, persist) {
@@ -414,12 +1035,14 @@
   }
   const leadDialog = $("#leadDialog");
   const reminderDialog = $("#reminderDialog");
+  const sitePromptDialog = $("#sitePromptDialog");
   const authForm = $("#authForm");
   const singleFieldMap = {
     leadName: ["name", "Nome"], leadPhone: ["phone", "Telefone"], leadCategory: ["category", "Categoria"],
     leadLocation: ["location", "Região"], leadSource: ["source", "Origem"], leadReviews: ["reviews", "Avaliações"],
     leadRating: ["rating", "Nota"], leadCompetitor: ["competitor", "Concorrente"],
     leadCompetitorReviews: ["competitorReviews", "Avaliações do concorrente"], leadGoogleUrl: ["googleUrl", "Ficha do Google"],
+    leadInstagram: ["instagram", "Instagram"], leadReviewUrl: ["reviewUrl", "Link de avaliação"], leadWebsite: ["website", "Site"],
     leadStatus: ["status", "Status"], leadNotes: ["notes", "Observações"]
   };
 
@@ -473,7 +1096,8 @@
     const before = JSON.stringify({
       version: Number(source._schemaVersion) || 1,
       leads: Array.isArray(source.leads) ? source.leads : [],
-      blocks: Array.isArray(source.promptBlocks) && source.promptBlocks.length ? source.promptBlocks.map(function (block) { return String(block.text || ""); }) : (typeof source.promptText === "string" ? source.promptText : defaultPrompt)
+      blocks: Array.isArray(source.promptBlocks) && source.promptBlocks.length ? source.promptBlocks.map(function (block) { return String(block.text || ""); }) : (typeof source.promptText === "string" ? source.promptText : defaultPrompt),
+      templates: promptTemplateSignature(source.promptTemplates)
     });
     const result = newState();
     result.promptCategory = typeof source.promptCategory === "string" ? source.promptCategory : "";
@@ -489,13 +1113,15 @@
     result.leads = Array.isArray(source.leads) ? source.leads : [];
     result.reminders = Array.isArray(source.reminders) ? source.reminders : [];
     result.sales = Array.isArray(source.sales) ? source.sales : [];
+    result.promptTemplates = normalizePromptTemplates(source.promptTemplates);
     result._promptUpdatedAt = typeof source._promptUpdatedAt === "string" ? source._promptUpdatedAt : "";
     result._schemaVersion = Number(source._schemaVersion) || 1;
     const migrated = migrateState(result);
     if (JSON.stringify({
       version: migrated._schemaVersion,
       leads: migrated.leads,
-      blocks: migrated.promptBlocks.map(function (block) { return String(block.text || ""); })
+      blocks: migrated.promptBlocks.map(function (block) { return String(block.text || ""); }),
+      templates: promptTemplateSignature(migrated.promptTemplates)
     }) !== before) migrated._migrateChanged = true;
     return migrated;
   }
@@ -515,6 +1141,11 @@
     stamp(state.sales, lastStateSnapshot.sales);
     const promptFields = ["promptCategory", "promptLocation", "promptText", "promptBlocks", "promptHistory"];
     if (promptFields.some(function (key) { return JSON.stringify(state[key]) !== JSON.stringify(lastStateSnapshot[key]); })) state._promptUpdatedAt = now;
+    PROMPT_TEMPLATE_KINDS.forEach(function (key) {
+      const current = state.promptTemplates && state.promptTemplates[key];
+      const previous = lastStateSnapshot.promptTemplates && lastStateSnapshot.promptTemplates[key];
+      if (current && (!previous || String(current.text || "") !== String(previous.text || ""))) current.updatedAt = now;
+    });
   }
   function mergeSyncedState(localState, remoteState, remoteUpdatedAt, meta) {
     const localPromptAt = Date.parse(localState._promptUpdatedAt || meta.localUpdatedAt || "") || 0;
@@ -539,6 +1170,7 @@
       promptText: promptSource.promptText,
       promptBlocks: promptSource.promptBlocks,
       promptHistory: Array.from(history.values()).sort(function (a,b) { return (Date.parse(b.usedAt || "") || 0) - (Date.parse(a.usedAt || "") || 0); }).slice(0, 10),
+      promptTemplates: mergePromptTemplates(localState.promptTemplates, remoteState.promptTemplates),
       _promptUpdatedAt: promptSource._promptUpdatedAt,
       leads: mergeRecords(localState.leads, remoteState.leads),
       reminders: mergeRecords(localState.reminders, remoteState.reminders),
@@ -943,7 +1575,7 @@
     return { ok: true };
   }
   function leadPayloadHasData(lead) {
-    const fields = [lead.name, lead.phone, lead.category, lead.location, lead.googleUrl, lead.reviews, lead.rating, lead.competitor, lead.competitorReviews, lead.message, lead.notes];
+    const fields = [lead.name, lead.phone, lead.category, lead.location, lead.googleUrl, lead.reviews, lead.rating, lead.competitor, lead.competitorReviews, lead.message, lead.notes, lead.instagram, lead.reviewUrl, lead.website];
     return fields.some(function (value) { return value && String(value).trim(); }) || (Array.isArray(lead.script) && lead.script.length > 0);
   }
   function showToast(message) {
@@ -1048,13 +1680,412 @@
     renderPromptHistory();
     return true;
   }
+  function renderModelTokens() {
+    const container = $("#modelsTokenList");
+    if (!container) return;
+    container.innerHTML = PROMPT_TEMPLATE_TOKENS.map(function (item) {
+      return '<button class="token-chip" type="button" data-model-token="' + escapeHtml(item[0]) + '" title="' + escapeHtml(item[1]) + '">' + escapeHtml(item[0]) + '</button>';
+    }).join("");
+  }
+  function modelsPreviewLead() {
+    const select = $("#modelsPreviewLead");
+    const id = select ? select.value : "";
+    return state.leads.find(function (item) { return item.id === id; }) || SAMPLE_LEAD;
+  }
+  function renderModelsPreview() {
+    const editor = $("#modelsEditor");
+    const preview = $("#modelsPreviewText");
+    if (!editor || !preview) return;
+    preview.value = buildPromptText(modelsTab, editor.value, modelsPreviewLead());
+    const warning = $("#modelsTokenWarning");
+    if (!warning) return;
+    const unknown = (editor.value.match(/\{\{[A-Z0-9_]+\}\}/g) || []).filter(function (token) {
+      return !PROMPT_TEMPLATE_TOKENS.some(function (item) { return item[0] === token; });
+    });
+    const missing = (PROMPT_REQUIRED_TOKENS[modelsTab] || []).filter(function (token) { return editor.value.indexOf(token) < 0; });
+    const messages = [];
+    if (unknown.length) messages.push("Tokens desconhecidos: " + unknown.join(", "));
+    if (missing.length) messages.push("Tokens recomendados ausentes: " + missing.join(", "));
+    warning.textContent = messages.join(" ");
+    warning.classList.toggle("hidden", !messages.length);
+  }
+  function renderModelsLeadOptions() {
+    const select = $("#modelsPreviewLead");
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = '<option value="">Lead de exemplo</option>' + state.leads.map(function (lead) {
+      return '<option value="' + escapeHtml(lead.id) + '">' + escapeHtml(lead.name || "Comércio sem nome") + '</option>';
+    }).join("");
+    select.value = state.leads.some(function (lead) { return lead.id === current; }) ? current : "";
+  }
+  function setModelsDirtyState(dirty) {
+    modelsDirty = dirty;
+    const saveStateEl = $("#modelsSaveState");
+    if (!saveStateEl) return;
+    saveStateEl.textContent = dirty ? "Alterações não salvas" : "Salvo";
+    saveStateEl.classList.toggle("dirty", dirty);
+  }
+  function renderModels() {
+    const editor = $("#modelsEditor");
+    if (!editor) return;
+    renderModelsLeadOptions();
+    const templates = normalizePromptTemplates(state.promptTemplates);
+    if (!modelsDirty) editor.value = templates[modelsTab].text;
+    $$(".models-tab").forEach(function (button) {
+      const active = button.dataset.modelTab === modelsTab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    setModelsDirtyState(modelsDirty);
+    renderModelTokens();
+    renderModelsPreview();
+  }
+  function setModelTab(tab) {
+    if (PROMPT_TEMPLATE_KINDS.indexOf(tab) < 0 || tab === modelsTab) return;
+    if (modelsDirty && !window.confirm("Você tem alterações não salvas no modelo. Descartar?")) return;
+    modelsTab = tab;
+    setModelsDirtyState(false);
+    renderModels();
+  }
+  function insertModelToken(token) {
+    const editor = $("#modelsEditor");
+    if (!editor) return;
+    const start = typeof editor.selectionStart === "number" ? editor.selectionStart : editor.value.length;
+    const end = typeof editor.selectionEnd === "number" ? editor.selectionEnd : editor.value.length;
+    editor.value = editor.value.slice(0, start) + token + editor.value.slice(end);
+    editor.selectionStart = editor.selectionEnd = start + token.length;
+    editor.focus();
+    setModelsDirtyState(true);
+    renderModelsPreview();
+  }
+  function saveModel() {
+    const editor = $("#modelsEditor");
+    if (!editor) return;
+    if (!editor.value.trim()) { showToast("O modelo não pode ficar vazio."); return; }
+    state.promptTemplates = normalizePromptTemplates(state.promptTemplates);
+    const current = state.promptTemplates[modelsTab];
+    if (current && current.text === editor.value) {
+      setModelsDirtyState(false);
+      showToast("O modelo já está salvo.");
+      return;
+    }
+    state.promptTemplates[modelsTab] = { text: editor.value, updatedAt: new Date().toISOString() };
+    setModelsDirtyState(false);
+    saveState();
+    renderModels();
+    showToast("Modelo salvo.");
+  }
+  function discardModel() {
+    if (!modelsDirty) return;
+    setModelsDirtyState(false);
+    renderModels();
+  }
+  function restoreModel() {
+    if (!window.confirm("Restaurar o modelo padrão de " + PROMPT_TEMPLATE_LABELS[modelsTab] + "? As alterações não salvas serão perdidas.")) return;
+    const editor = $("#modelsEditor");
+    if (!editor) return;
+    editor.value = PROMPT_TEMPLATE_DEFAULTS[modelsTab];
+    setModelsDirtyState(true);
+    renderModelsPreview();
+    showToast("Padrão restaurado. Clique em Salvar modelo para aplicar.");
+  }
+  function sitePromptLead() {
+    return state.leads.find(function (item) { return item.id === sitePromptLeadId; }) || null;
+  }
+  function sitePromptOverrides() {
+    return {
+      googleUrl: normalizeUrlValue($("#siteLinkGoogle") ? $("#siteLinkGoogle").value : ""),
+      reviewUrl: normalizeUrlValue($("#siteLinkReview") ? $("#siteLinkReview").value : ""),
+      phone: digits($("#siteLinkPhone") ? $("#siteLinkPhone").value : ""),
+      instagram: $("#siteLinkInstagram") ? $("#siteLinkInstagram").value.trim() : "",
+      website: normalizeUrlValue($("#siteLinkWebsite") ? $("#siteLinkWebsite").value : ""),
+      projectFolder: $("#siteLinkProjectFolder") ? $("#siteLinkProjectFolder").value.trim() : "",
+      imagesFolder: $("#siteLinkImagesFolder") ? $("#siteLinkImagesFolder").value.trim() : "",
+      links: collectSiteExtraLinks()
+    };
+  }
+  function sitePromptLeadWithOverrides() {
+    const lead = sitePromptLead();
+    if (!lead) return null;
+    const overrides = sitePromptOverrides();
+    return Object.assign({}, lead, {
+      googleUrl: overrides.googleUrl,
+      reviewUrl: overrides.reviewUrl,
+      phone: overrides.phone,
+      instagram: overrides.instagram,
+      website: overrides.website,
+      links: overrides.links,
+      siteProjectFolder: overrides.projectFolder,
+      siteImagesFolder: overrides.imagesFolder
+    });
+  }
+  function siteExtraLinkRowMarkup(label, url) {
+    return '<div class="site-extra-row">' +
+      '<input class="site-extra-label" value="' + escapeHtml(label) + '" placeholder="Nome do link (ex.: Cardápio)" aria-label="Nome do link extra">' +
+      '<input class="site-extra-url" value="' + escapeHtml(url) + '" placeholder="https://..." inputmode="url" aria-label="URL do link extra">' +
+      '<button class="icon-button icon-button-danger" type="button" data-extra-remove aria-label="Remover link">×</button>' +
+      '</div>';
+  }
+  function renderSiteExtraLinks(links) {
+    const container = $("#siteExtraLinks");
+    if (!container) return;
+    const list = Array.isArray(links) ? links : [];
+    container.innerHTML = list.map(function (item) { return siteExtraLinkRowMarkup(item.label || "", item.url || ""); }).join("");
+    if (!list.length) container.innerHTML = '<p class="empty-small site-extra-empty">Nenhum link extra. Use “Adicionar link” abaixo.</p>';
+  }
+  function collectSiteExtraLinks() {
+    return $$("#siteExtraLinks .site-extra-row").map(function (row) {
+      const label = row.querySelector(".site-extra-label");
+      const url = row.querySelector(".site-extra-url");
+      return { label: label ? label.value.trim() : "", url: url ? normalizeUrlValue(url.value) : "" };
+    }).filter(function (item) { return item.label && item.url; });
+  }
+  function renderSitePromptTabs() {
+    $$(".site-prompt-tab").forEach(function (button) {
+      const active = button.dataset.siteTab === sitePromptTab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+  }
+  function renderSitePrompt() {
+    const preview = $("#sitePromptText");
+    if (!preview) return;
+    const lead = sitePromptLeadWithOverrides();
+    if (!lead) { preview.value = ""; return; }
+    preview.value = buildPromptText(sitePromptTab, promptTemplateText(sitePromptTab), lead);
+    const hint = $("#sitePromptHint");
+    if (hint) hint.textContent = PROMPT_TEMPLATE_LABELS[sitePromptTab] + " · montado com o modelo salvo";
+  }
+  function markSitePromptDirty() {
+    sitePromptDirty = true;
+    renderSitePrompt();
+  }
+  function syncLeadFormPresence(lead) {
+    if (!$("#leadId") || $("#leadId").value !== lead.id) return;
+    $("#leadPhone").value = lead.phone || "";
+    $("#leadGoogleUrl").value = lead.googleUrl || "";
+    $("#leadInstagram").value = lead.instagram || "";
+    $("#leadReviewUrl").value = lead.reviewUrl || "";
+    $("#leadWebsite").value = lead.website || "";
+  }
+  function saveSitePromptLinks() {
+    const lead = sitePromptLead();
+    if (!lead) return;
+    const overrides = sitePromptOverrides();
+    lead.googleUrl = overrides.googleUrl;
+    lead.reviewUrl = overrides.reviewUrl;
+    lead.phone = overrides.phone;
+    lead.instagram = overrides.instagram;
+    lead.website = overrides.website;
+    lead.links = overrides.links;
+    lead.siteProjectFolder = overrides.projectFolder;
+    lead.siteImagesFolder = overrides.imagesFolder;
+    sitePromptDirty = false;
+    saveState();
+    syncLeadFormPresence(lead);
+    renderLeads();
+  }
+  function openSitePrompt(leadId) {
+    const lead = state.leads.find(function (item) { return item.id === leadId; });
+    if (!lead) return;
+    sitePromptLeadId = lead.id;
+    sitePromptTab = "site";
+    sitePromptDirty = false;
+    $("#sitePromptTitle").textContent = "Prompt do site · " + (lead.name || "Lead");
+    $("#siteLinkGoogle").value = lead.googleUrl || "";
+    $("#siteLinkReview").value = lead.reviewUrl || googleReviewUrl(lead.googleUrl) || "";
+    $("#siteLinkPhone").value = lead.phone || "";
+    $("#siteLinkInstagram").value = lead.instagram || "";
+    $("#siteLinkWebsite").value = lead.website || "";
+    $("#siteLinkProjectFolder").value = lead.siteProjectFolder || ("sites/" + slugify(lead.name));
+    $("#siteLinkImagesFolder").value = lead.siteImagesFolder || ("sites/" + slugify(lead.name) + "/assets");
+    renderSiteExtraLinks(lead.links);
+    renderSitePromptTabs();
+    renderSitePrompt();
+    sitePromptDialog.showModal();
+  }
+  function reviewSourceLabel(source) {
+    return {
+      "place-id": "Place ID informado",
+      "feature-id": "Código do Maps",
+      url: "URL do Google Maps",
+      "review-url": "Link de avaliação",
+      resolved: "Link curto resolvido",
+      manual: "Link curto confirmado"
+    }[source] || "Link gerado";
+  }
+  function setReviewStatus(message, tone) {
+    const element = $("#reviewStatus");
+    if (!element) return;
+    element.textContent = message || "";
+    element.classList.toggle("is-error", tone === "error");
+    element.classList.toggle("is-success", tone === "success");
+  }
+  function setReviewBusy(busy, label) {
+    reviewBusy = busy;
+    const generate = $("#reviewGenerate");
+    const resolvedGenerate = $("#reviewResolvedGenerate");
+    const paste = $("#reviewPaste");
+    [generate, resolvedGenerate, paste].forEach(function (button) {
+      if (button) button.disabled = busy;
+    });
+    if (generate) generate.textContent = busy ? "Gerando..." : "Gerar link de avaliação";
+    if (resolvedGenerate) resolvedGenerate.textContent = busy ? "Gerando..." : "Gerar com esta URL";
+    const input = $("#reviewInput");
+    const resolvedInput = $("#reviewResolvedInput");
+    if (input) input.disabled = busy;
+    if (resolvedInput) resolvedInput.disabled = busy;
+    if (busy && label) setReviewStatus(label);
+  }
+  function renderReviewLeadOptions() {
+    const select = $("#reviewLeadSelect");
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = '<option value="">Selecione um lead</option>' + state.leads.map(function (lead) {
+      return '<option value="' + escapeHtml(lead.id) + '">' + escapeHtml(lead.name || "Comércio sem nome") + '</option>';
+    }).join("");
+    select.value = state.leads.some(function (lead) { return lead.id === current; }) ? current : "";
+    const save = $("#reviewSave");
+    if (save) save.classList.toggle("hidden", !state.leads.length);
+  }
+  function renderReviewResult() {
+    const empty = $("#reviewEmpty");
+    const panel = $("#reviewResult");
+    if (!empty || !panel) return;
+    if (!reviewResultData) {
+      empty.classList.remove("hidden");
+      panel.classList.add("hidden");
+      return;
+    }
+    const result = reviewResultData;
+    const link = result.reviewUrl || reviewLinkForPlaceId(result.placeId);
+    empty.classList.add("hidden");
+    panel.classList.remove("hidden");
+    if ($("#reviewResultName")) $("#reviewResultName").textContent = result.name || "Comércio identificado";
+    if ($("#reviewResultSource")) $("#reviewResultSource").textContent = reviewSourceLabel(result.source);
+    if ($("#reviewResultLink")) $("#reviewResultLink").value = link;
+    if ($("#reviewResultPlaceId")) $("#reviewResultPlaceId").textContent = result.placeId || "—";
+    if ($("#reviewOpen")) $("#reviewOpen").href = link || "#";
+    if ($("#reviewMaps")) $("#reviewMaps").href = result.placeId ? "https://www.google.com/maps/place/?q=place_id:" + encodeURIComponent(result.placeId) : "#";
+    if ($("#reviewSaveLead")) $("#reviewSaveLead").disabled = !result.placeId;
+    renderReviewLeadOptions();
+  }
+  function renderReviewTool() {
+    renderReviewLeadOptions();
+    renderReviewResult();
+  }
+  function resetReviewTool() {
+    if (reviewBusy) return;
+    reviewResultData = null;
+    reviewPendingUrl = "";
+    if ($("#reviewInput")) $("#reviewInput").value = "";
+    if ($("#reviewResolvedInput")) $("#reviewResolvedInput").value = "";
+    if ($("#reviewRecovery")) $("#reviewRecovery").classList.add("hidden");
+    setReviewStatus("");
+    renderReviewResult();
+    if ($("#reviewInput")) $("#reviewInput").focus();
+  }
+  function showReviewRecovery() {
+    const panel = $("#reviewRecovery");
+    if (panel) panel.classList.remove("hidden");
+    const input = $("#reviewResolvedInput");
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+  }
+  async function startReviewGeneration(value) {
+    if (reviewBusy) return;
+    const input = String(value || "").trim();
+    if (!input) {
+      setReviewStatus("Cole um link do Google Maps ou um Place ID.", "error");
+      return;
+    }
+    const pending = reviewPendingUrl;
+    reviewResultData = null;
+    reviewPendingUrl = "";
+    if ($("#reviewRecovery")) $("#reviewRecovery").classList.add("hidden");
+    renderReviewResult();
+    setReviewBusy(true, "Lendo link...");
+    try {
+      const result = await resolveReviewInput(input);
+      if (result && (result.placeId || result.reviewUrl)) {
+        if (pending && result.placeId && input !== pending) {
+          result.source = "manual";
+          writeReviewCache(pending, result);
+        }
+        reviewResultData = result;
+        setReviewStatus("Link de avaliação gerado.", "success");
+        renderReviewResult();
+      } else if (result && result.needsManual) {
+        reviewPendingUrl = result.unresolvedUrl || input;
+        showReviewRecovery();
+        setReviewStatus("Não consegui ler esse link automaticamente. Use a opção abaixo.", "error");
+      } else {
+        setReviewStatus((result && result.error) || "Não encontrei o identificador nesse link. Use a URL completa da ficha do Maps.", "error");
+      }
+    } catch (_) {
+      setReviewStatus("Não foi possível gerar o link agora. Tente novamente.", "error");
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+  function pasteReviewResolved() {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      showToast("Cole a URL manualmente.");
+      return;
+    }
+    navigator.clipboard.readText().then(function (text) {
+      const input = $("#reviewResolvedInput");
+      if (!input) return;
+      input.value = String(text || "").trim();
+      if (input.value) startReviewGeneration(input.value);
+    }, function () {
+      showToast("Não foi possível ler a área de transferência. Cole manualmente.");
+    });
+  }
+  function saveReviewToLead() {
+    if (!reviewResultData || !reviewResultData.placeId) {
+      showToast("Gere um link primeiro.");
+      return;
+    }
+    const select = $("#reviewLeadSelect");
+    const leadId = select ? select.value : "";
+    if (!leadId) {
+      showToast("Selecione um lead.");
+      return;
+    }
+    const lead = state.leads.find(function (item) { return item.id === leadId; });
+    if (!lead) {
+      showToast("Lead não encontrado. Atualize a página.");
+      return;
+    }
+    const link = reviewResultData.reviewUrl || reviewLinkForPlaceId(reviewResultData.placeId);
+    if (lead.reviewUrl === link) {
+      showToast("Este link já está salvo neste lead.");
+      return;
+    }
+    if (lead.reviewUrl && !window.confirm("Este lead já tem um link de avaliação. Substituir?")) return;
+    lead.reviewUrl = link;
+    saveState();
+    renderLeads();
+    renderReviewLeadOptions();
+    showToast("Link de avaliação salvo no lead.");
+  }
   function setView(view) {
+    if (currentView === "models" && view !== "models" && modelsDirty) {
+      if (!window.confirm("Você tem alterações não salvas no modelo. Sair mesmo assim?")) return;
+      setModelsDirtyState(false);
+    }
+    currentView = view;
     $$(".page-view").forEach(function (section) { section.classList.toggle("active", section.id === "view-" + view); });
     $$(".nav-item").forEach(function (button) { button.classList.toggle("active", button.dataset.view === view); });
-    $("#topTitle").textContent = { prompt: "Prompt de pesquisa", crm: "Leads", agenda: "Lembretes", reports: "Relatórios" }[view] || "Prospecção";
+    $("#topTitle").textContent = { prompt: "Prompt de pesquisa", crm: "Leads", agenda: "Lembretes", reports: "Relatórios", review: "Link de avaliação", models: "Modelos de prompt" }[view] || "Prospecção";
     if (view === "crm") renderLeads();
     if (view === "agenda") renderAgenda();
     if (view === "reports") renderReports();
+    if (view === "review") renderReviewTool();
+    if (view === "models") renderModels();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function setSidebarCollapsed(collapsed) {
@@ -1110,7 +2141,7 @@
     const query = normalize($("#leadSearch").value.trim());
     const visible = sortLeads(state.leads.filter(function (lead) {
       const statusMatches = activeStatus === "Todos" || lead.status === activeStatus;
-      const searchMatches = !query || normalize([lead.name, lead.phone, lead.category, lead.location, lead.competitor, lead.source].join(" ")).includes(query);
+      const searchMatches = !query || normalize([lead.name, lead.phone, lead.category, lead.location, lead.competitor, lead.source, lead.instagram].join(" ")).includes(query);
       const categoryMatches = activeCategory === "Todas" || String(lead.category || "") === activeCategory;
       const sourceMatches = activeSource === "Todas" || String(lead.source || "") === activeSource;
       return statusMatches && searchMatches && categoryMatches && sourceMatches;
@@ -1246,6 +2277,9 @@
     $("#leadCompetitor").value = lead.competitor || "";
     $("#leadCompetitorReviews").value = lead.competitorReviews || "";
     $("#leadGoogleUrl").value = lead.googleUrl || "";
+    $("#leadInstagram").value = lead.instagram || "";
+    $("#leadReviewUrl").value = lead.reviewUrl || "";
+    $("#leadWebsite").value = lead.website || "";
     $("#leadStatus").value = STATUSES.includes(lead.status) ? lead.status : "Novo";
     startLeadScriptEditor(lead);
     $("#leadNotes").value = lead.notes || "";
@@ -1253,6 +2287,7 @@
     renderLeadSaleList(lead.id);
     $("#deleteLead").classList.remove("hidden");
     $("#addReminderForLead").classList.remove("hidden");
+    $("#leadSitePrompt").classList.remove("hidden");
     $("#saveSingleField").classList.remove("hidden");
     resetSingleFieldSave();
     updateSaleSectionVisibility();
@@ -1341,6 +2376,7 @@
     $("#leadSource").value = "Prospecção na rua";
     $("#deleteLead").classList.add("hidden");
     $("#addReminderForLead").classList.add("hidden");
+    $("#leadSitePrompt").classList.add("hidden");
     $("#leadWhatsApp").classList.add("hidden");
     $("#leadGoogleProfile").classList.add("hidden");
     $("#saveSingleField").classList.add("hidden");
@@ -1394,7 +2430,8 @@
       message: function (h) { return h === "mensagem"; },
       script: function (h) { return h.includes("script"); },
       location: function (h) { return h.includes("bairro") || h.includes("regiao") || h.includes("cidade"); },
-      category: function (h) { return h === "categoria" || h.includes("tipodenegocio"); }
+      category: function (h) { return h === "categoria" || h.includes("tipodenegocio"); },
+      instagram: function (h) { return h === "instagram" || h.includes("perfilinstagram") || h.includes("instagramurl"); }
     };
     return normalized.findIndex(predicates[kind]);
   }
@@ -1428,7 +2465,7 @@
     const rows = parseTableRows(lines, headerIndex, headers);
     if (!rows.length) return { leads: [], error: "Não encontrei uma tabela Markdown. Confira se a resposta tem colunas separadas por |." };
     const indexes = {};
-    ["name", "phone", "googleUrl", "reviews", "rating", "competitor", "competitorReviews", "approach", "message", "script", "location", "category"].forEach(function (key) {
+    ["name", "phone", "googleUrl", "reviews", "rating", "competitor", "competitorReviews", "approach", "message", "script", "location", "category", "instagram"].forEach(function (key) {
       indexes[key] = columnIndex(headers, key);
     });
     const messageColumns = headers.map(function (header, index) {
@@ -1467,8 +2504,10 @@
       parsed.push({
         id: uid(), name: name, phone: val("phone"), googleUrl: val("googleUrl"), category: val("category") || state.promptCategory,
         location: val("location") || state.promptLocation, reviews: val("reviews"), rating: val("rating"),
+        instagram: val("instagram"), reviewUrl: "", website: "",
         competitor: val("competitor"), competitorReviews: val("competitorReviews"), approach: approachValue,
         message: (scriptSteps[0] && scriptSteps[0].text) || approachValue || legacyMessage, notes: "", source: "Pesquisa online", status: "Novo",
+        links: [], siteProjectFolder: "", siteImagesFolder: "",
         script: scriptSteps,
         statusHistory: [{ at: new Date().toISOString(), from: "", to: "Novo" }],
         createdAt: new Date().toISOString()
@@ -2324,19 +3363,10 @@
       button.classList.toggle("active", button.dataset.period === reportPeriod);
     });
   }
-  function renderAll() { renderPrompt(); renderLeads(); renderAgenda(); renderReports(); }
+  function renderAll() { renderPrompt(); renderLeads(); renderAgenda(); renderReports(); renderReviewTool(); renderModels(); }
 
   $$(".nav-item").forEach(function (button) {
-    button.addEventListener("click", function () {
-      const view = button.dataset.view;
-      $$(".page-view").forEach(function (section) { section.classList.toggle("active", section.id === "view-" + view); });
-      $$(".nav-item").forEach(function (item) { item.classList.toggle("active", item === button); });
-      $("#topTitle").textContent = { prompt: "Prompt de pesquisa", crm: "Leads", agenda: "Lembretes", reports: "Relatórios" }[view];
-      if (view === "crm") renderLeads();
-      if (view === "agenda") renderAgenda();
-      if (view === "reports") renderReports();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
+    button.addEventListener("click", function () { setView(button.dataset.view); });
   });
   $$("[data-go]").forEach(function (button) {
     button.addEventListener("click", function () {
@@ -2345,6 +3375,31 @@
       if (nav) nav.click();
     });
   });
+
+  $("#reviewGenerate").addEventListener("click", function () { startReviewGeneration($("#reviewInput").value); });
+  $("#reviewInput").addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    startReviewGeneration($("#reviewInput").value);
+  });
+  $("#reviewClear").addEventListener("click", resetReviewTool);
+  $("#reviewCopy").addEventListener("click", function () {
+    const link = $("#reviewResultLink").value;
+    if (!link) { showToast("Nada para copiar."); return; }
+    copyText(link, "Link de avaliação copiado.");
+  });
+  $("#reviewResolvedGenerate").addEventListener("click", function () { startReviewGeneration($("#reviewResolvedInput").value); });
+  $("#reviewResolvedInput").addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    startReviewGeneration($("#reviewResolvedInput").value);
+  });
+  $("#reviewPaste").addEventListener("click", pasteReviewResolved);
+  $("#reviewRecoveryOpen").addEventListener("click", function () {
+    if (!reviewPendingUrl) return;
+    window.open(reviewPendingUrl, "_blank", "noopener,noreferrer");
+  });
+  $("#reviewSaveLead").addEventListener("click", saveReviewToLead);
 
   $("#promptCategory").addEventListener("input", function (event) { state.promptCategory = event.target.value; $("#promptEditor").value = readyPrompt(); renderPromptBlocks(); saveState(); });
   $("#sidebarToggle").addEventListener("click", function () { setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed")); });
@@ -2678,9 +3733,13 @@
       id: id || uid(), name: $("#leadName").value.trim(), phone: $("#leadPhone").value.trim(),
       category: $("#leadCategory").value.trim(), location: $("#leadLocation").value.trim(),
       googleUrl: $("#leadGoogleUrl").value.trim(),
+      instagram: $("#leadInstagram").value.trim(), reviewUrl: $("#leadReviewUrl").value.trim(), website: $("#leadWebsite").value.trim(),
       source: $("#leadSource").value, reviews: $("#leadReviews").value.trim(), rating: $("#leadRating").value.trim(),
       competitor: $("#leadCompetitor").value.trim(), competitorReviews: $("#leadCompetitorReviews").value.trim(),
       status: current ? current.status : "Novo", message: "", notes: $("#leadNotes").value.trim(),
+      links: current && Array.isArray(current.links) ? current.links : [],
+      siteProjectFolder: current ? current.siteProjectFolder || "" : "",
+      siteImagesFolder: current ? current.siteImagesFolder || "" : "",
       script: steps,
       statusHistory: current && Array.isArray(current.statusHistory) ? current.statusHistory.slice() : [],
       createdAt: current ? current.createdAt : new Date().toISOString()
@@ -2765,10 +3824,84 @@
       dialog.close();
     });
   });
-  [leadDialog, reminderDialog].forEach(function (dialog) {
+  [leadDialog, reminderDialog, sitePromptDialog].forEach(function (dialog) {
     dialog.addEventListener("click", function (event) { if (event.target === dialog) dialog.close(); });
   });
   leadDialog.addEventListener("close", resetLeadDialog);
+  sitePromptDialog.addEventListener("close", function () {
+    if (sitePromptDirty) saveSitePromptLinks();
+    sitePromptLeadId = "";
+  });
+  $("#leadSitePrompt").addEventListener("click", function () { openSitePrompt($("#leadId").value); });
+  $$(".models-tab").forEach(function (button) {
+    button.addEventListener("click", function () { setModelTab(button.dataset.modelTab); });
+  });
+  $("#modelsEditor").addEventListener("input", function () {
+    setModelsDirtyState(true);
+    renderModelsPreview();
+  });
+  $("#modelsTokenList").addEventListener("click", function (event) {
+    const button = event.target.closest("[data-model-token]");
+    if (button) insertModelToken(button.dataset.modelToken);
+  });
+  $("#modelsSave").addEventListener("click", saveModel);
+  $("#modelsDiscard").addEventListener("click", discardModel);
+  $("#modelsRestore").addEventListener("click", restoreModel);
+  $("#modelsPreviewLead").addEventListener("change", renderModelsPreview);
+  $("#modelsCopyPreview").addEventListener("click", function () {
+    const text = $("#modelsPreviewText").value;
+    if (!text.trim()) { showToast("Nada para copiar."); return; }
+    copyText(text, "Prévia copiada.");
+  });
+  $$(".site-prompt-tab").forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (button.dataset.siteTab === sitePromptTab) return;
+      sitePromptTab = button.dataset.siteTab;
+      renderSitePromptTabs();
+      renderSitePrompt();
+    });
+  });
+  ["siteLinkGoogle", "siteLinkReview", "siteLinkPhone", "siteLinkInstagram", "siteLinkWebsite", "siteLinkProjectFolder", "siteLinkImagesFolder"].forEach(function (id) {
+    const input = $("#" + id);
+    if (input) input.addEventListener("input", markSitePromptDirty);
+  });
+  $("#siteExtraLinks").addEventListener("input", markSitePromptDirty);
+  $("#siteExtraLinks").addEventListener("click", function (event) {
+    const remove = event.target.closest("[data-extra-remove]");
+    if (!remove) return;
+    const row = remove.closest(".site-extra-row");
+    if (row) row.remove();
+    sitePromptDirty = true;
+    renderSitePrompt();
+  });
+  $("#siteAddExtraLink").addEventListener("click", function () {
+    const container = $("#siteExtraLinks");
+    if (!container) return;
+    const empty = container.querySelector(".site-extra-empty");
+    if (empty) empty.remove();
+    container.insertAdjacentHTML("beforeend", siteExtraLinkRowMarkup("", ""));
+    const rows = $$("#siteExtraLinks .site-extra-row");
+    const last = rows[rows.length - 1];
+    const label = last ? last.querySelector(".site-extra-label") : null;
+    if (label) label.focus();
+    sitePromptDirty = true;
+    renderSitePrompt();
+  });
+  $("#sitePromptCopy").addEventListener("click", function () {
+    const text = $("#sitePromptText").value;
+    if (!text.trim()) { showToast("Nada para copiar."); return; }
+    saveSitePromptLinks();
+    copyText(text, "Prompt copiado.");
+  });
+  $("#sitePromptEditModel").addEventListener("click", function () {
+    const tab = sitePromptTab;
+    if (sitePromptDirty) saveSitePromptLinks();
+    sitePromptDialog.close();
+    if (leadDialog.open) leadDialog.close();
+    setModelTab(tab);
+    setView("models");
+  });
+  $("#sitePromptForm").addEventListener("submit", function (event) { event.preventDefault(); });
   $("#themeToggle").addEventListener("click", function () {
     setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true);
   });
