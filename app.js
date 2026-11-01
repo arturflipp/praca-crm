@@ -12,6 +12,8 @@
   const REVIEW_REMOTE_ENDPOINT = "https://r.jina.ai/";
   const REVIEW_REDIRECT_CHECKER = "https://api.redirect-checker.net/?url=";
   const supabaseConfig = window.PRACA_CRM_SUPABASE || {};
+  const ICON_CHEVRON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+  const ICON_X = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
   let supabase = null;
   let supabaseReadyPromise = null;
   const STATUSES = ["Novo", "Mandei", "Respondeu", "Proposta", "Vendido", "Sem resposta", "Recusa"];
@@ -1018,10 +1020,8 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const dark = theme === "dark";
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     const toggle = $("#themeToggle");
-    const icon = $("#themeIcon");
     const label = toggle && toggle.querySelector(".theme-toggle-label");
     const action = dark ? "Ativar tema claro" : "Ativar tema escuro";
-    if (icon) icon.textContent = dark ? "☼" : "☾";
     if (label) label.textContent = dark ? "Claro" : "Escuro";
     if (toggle) {
       toggle.setAttribute("aria-label", action);
@@ -1347,10 +1347,23 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       setSyncState("synced", "Atualizado");
     } catch (_) { setSyncState("offline", "Sem conexão"); }
   }
-  function initializeAuth() {
+  function hasStoredSession() {
+    try {
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (key && key.indexOf("-auth-token") >= 0) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+  function initializeAuth(force) {
     if (supabaseReadyPromise) return supabaseReadyPromise;
     if (!supabaseConfig.url || !supabaseConfig.publishableKey) {
       showAuthMessage("A configuração do Supabase está ausente. Você ainda pode usar o CRM somente neste navegador.");
+      return Promise.resolve(null);
+    }
+    if (!force && !hasStoredSession()) {
+      setSyncState("offline", "Entre na sua conta");
       return Promise.resolve(null);
     }
     supabaseReadyPromise = (async function () {
@@ -1647,7 +1660,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   function renderPromptBlocks() {
     const blocks = Array.isArray(state.promptBlocks) ? state.promptBlocks : [];
     $("#promptSections").innerHTML = blocks.map(function (block, index) {
-      return '<details class="prompt-block"><summary><span>' + escapeHtml(block.title) + '</span><small>Editar</small></summary><div class="prompt-block-body"><p>' + escapeHtml(block.help) + '</p><textarea rows="4" data-prompt-block-index="' + index + '" aria-label="' + escapeHtml(block.title) + '"></textarea></div></details>';
+      return '<details class="prompt-block"><summary><span>' + escapeHtml(block.title) + '</span><small>Editar</small></summary><div class="prompt-block-body"><p>' + escapeHtml(block.help) + '</p><textarea id="promptBlock' + index + '" name="promptBlock' + index + '" rows="4" data-prompt-block-index="' + index + '" aria-label="' + escapeHtml(block.title) + '"></textarea></div></details>';
     }).join("");
     $$("[data-prompt-block-index]").forEach(function (textarea) {
       textarea.value = readyPromptText(blocks[Number(textarea.dataset.promptBlockIndex)].text);
@@ -1747,6 +1760,22 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     setModelsDirtyState(false);
     renderModels();
   }
+  function moveTabFocus(event, selector, activate) {
+    const tab = event.target.closest(selector);
+    if (!tab) return;
+    const tabs = $$(selector);
+    const index = tabs.indexOf(tab);
+    if (index < 0) return;
+    let next = -1;
+    if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    tabs[next].focus();
+    activate(tabs[next]);
+  }
   function insertModelToken(token) {
     const editor = $("#modelsEditor");
     if (!editor) return;
@@ -1823,7 +1852,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     return '<div class="site-extra-row">' +
       '<input class="site-extra-label" value="' + escapeHtml(label) + '" placeholder="Nome do link (ex.: Cardápio)" aria-label="Nome do link extra">' +
       '<input class="site-extra-url" value="' + escapeHtml(url) + '" placeholder="https://..." inputmode="url" aria-label="URL do link extra">' +
-      '<button class="icon-button icon-button-danger" type="button" data-extra-remove aria-label="Remover link">×</button>' +
+      '<button class="icon-button icon-button-danger" type="button" data-extra-remove aria-label="Remover link">' + ICON_X + '</button>' +
       '</div>';
   }
   function renderSiteExtraLinks(links) {
@@ -2153,11 +2182,11 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       const phone = lead.phone ? "WhatsApp " + lead.phone : "Sem telefone";
       const status = STATUSES.includes(lead.status) ? lead.status : "Novo";
       const googleLink = googleProfileHref(lead.googleUrl);
-      return '<article class="lead-row" data-lead-id="' + escapeHtml(lead.id) + '" tabindex="0" role="button" aria-label="Abrir lead ' + escapeHtml(lead.name) + '">' +
+      return '<article class="lead-row" data-lead-id="' + escapeHtml(lead.id) + '" tabindex="0" role="button">' +
         '<div><div class="lead-name">' + escapeHtml(lead.name || "Comércio sem nome") + '</div><div class="lead-sub">' + escapeHtml(subtitle) + " · " + escapeHtml(phone) + '</div></div>' +
         '<div class="lead-gap">' + escapeHtml(gapText) + '<small>' + escapeHtml(lead.competitor ? "vs. " + lead.competitor : "sem concorrente") + '</small></div>' +
         '<div class="lead-source">' + escapeHtml(lead.source || "Origem não informada") + (googleLink ? '<a class="google-quick-link" href="' + escapeHtml(googleLink) + '" target="_blank" rel="noopener noreferrer">Google ↗</a>' : '') + '</div>' +
-        '<span class="status-chip" data-status="' + escapeHtml(status) + '">' + escapeHtml(status) + '</span><span class="lead-arrow">›</span></article>';
+        '<span class="status-chip" data-status="' + escapeHtml(status) + '">' + escapeHtml(status) + '</span><span class="lead-arrow" aria-hidden="true">' + ICON_CHEVRON + '</span></article>';
     }).join("");
     $$(".filter-tab").forEach(function (button) { button.classList.toggle("active", button.dataset.status === activeStatus); });
     $("#filterCountTodos").textContent = String(state.leads.length);
@@ -2217,12 +2246,12 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       return '<div class="script-step">' +
         '<div class="script-step-head">' +
           '<span class="script-step-num" aria-hidden="true">' + (index + 1) + '</span>' +
-          '<input class="script-step-title" data-script-title="' + index + '" value="' + escapeHtml(step.title || "") + '" placeholder="Título da etapa">' +
+          '<input class="script-step-title" id="scriptStepTitle' + index + '" name="scriptStepTitle' + index + '" data-script-title="' + index + '" value="' + escapeHtml(step.title || "") + '" placeholder="Título da etapa">' +
           '<button class="icon-button" type="button" data-script-copy="' + index + '" aria-label="Copiar esta etapa" title="Copiar esta mensagem"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="9" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg></button>' +
           '<button class="icon-button icon-button-danger" type="button" data-script-remove="' + index + '" aria-label="Excluir esta etapa" title="Excluir esta etapa"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4m2.2 0-.6 9.2a1 1 0 0 1-1 .9H5.4a1 1 0 0 1-1-.9L3.8 4m2.7 2.2v5m3-5v5"/></svg></button>' +
         '</div>' +
-        '<textarea class="script-step-text" data-script-text="' + index + '" rows="4" placeholder="Texto desta etapa para enviar no WhatsApp">' + escapeHtml(step.text || "") + '</textarea>' +
-        '<input class="script-step-note" data-script-note="' + index + '" value="' + escapeHtml(step.note || "") + '" placeholder="Nota (não é enviada): ex. enviar junto o vídeo da plaquinha">' +
+        '<textarea class="script-step-text" id="scriptStepText' + index + '" name="scriptStepText' + index + '" data-script-text="' + index + '" rows="4" placeholder="Texto desta etapa para enviar no WhatsApp">' + escapeHtml(step.text || "") + '</textarea>' +
+        '<input class="script-step-note" id="scriptStepNote' + index + '" name="scriptStepNote' + index + '" data-script-note="' + index + '" value="' + escapeHtml(step.note || "") + '" placeholder="Nota (não é enviada): ex. enviar junto o vídeo da plaquinha">' +
       '</div>';
     }).join("") : '<p class="empty-small">Sem etapas por enquanto. Use “Adicionar etapa” acima para escrever a primeira mensagem.</p>';
   }
@@ -2265,7 +2294,6 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     leadOpenedStatus = lead.status;
     saleExitDecision = "";
     $("#leadId").value = lead.id;
-    $("#leadModalEyebrow").textContent = "LEAD · " + (lead.status || "Novo").toUpperCase();
     $("#leadModalTitle").textContent = "Editar lead";
     $("#leadName").value = lead.name || "";
     $("#leadPhone").value = lead.phone || "";
@@ -2370,7 +2398,6 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     leadOpenedStatus = "";
     saleExitDecision = "";
     $("#leadId").value = "";
-    $("#leadModalEyebrow").textContent = "NOVO REGISTRO";
     $("#leadModalTitle").textContent = "Adicionar lead";
     $("#leadStatus").value = "Novo";
     $("#leadSource").value = "Prospecção na rua";
@@ -3136,7 +3163,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     }).join("");
     $("#emptyAgenda").classList.toggle("hidden", items.length > 0);
     if (!items.length) {
-      $("#emptyAgenda h3").textContent = state.reminders.length ? "Nenhum lembrete neste filtro" : "Nenhum lembrete por enquanto";
+      $("#emptyAgenda h2").textContent = state.reminders.length ? "Nenhum lembrete neste filtro" : "Nenhum lembrete por enquanto";
       $("#emptyAgenda p").textContent = state.reminders.length ? "Troque o filtro para ver outros lembretes ou crie um novo." : "Crie um lembrete para uma visita, retorno ou detalhe importante de uma venda.";
       $("#emptyReminder").classList.toggle("hidden", state.reminders.length > 0);
     }
@@ -3313,10 +3340,10 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       const subtitle = [sale.category, sale.location].filter(Boolean).join(" · ") || "Sem categoria ou região";
       const value = typeof sale.valueCents === "number" && sale.valueCents > 0 ? escapeHtml(formatCurrency(sale.valueCents)) : '<span class="report-value-pending">valor pendente</span>';
       const date = sale.soldAt ? formatDate(sale.soldAt, { day: "2-digit", month: "short", year: "numeric" }) : "sem data";
-      return '<article class="sale-row"' + (lead ? ' data-sale-lead="' + escapeHtml(sale.leadId) + '" tabindex="0" role="button" aria-label="Abrir venda de ' + escapeHtml(sale.leadName) + '"' : "") + '>' +
+      return '<article class="sale-row"' + (lead ? ' data-sale-lead="' + escapeHtml(sale.leadId) + '" tabindex="0" role="button"' : "") + '>' +
         '<div class="sale-main"><strong>' + escapeHtml(sale.leadName || "Comércio sem nome") + '</strong><small>' + escapeHtml(subtitle) + " · " + escapeHtml(date) + (lead ? "" : " · lead excluído") + '</small></div>' +
         '<div class="sale-value">' + value + '</div>' +
-        (lead ? '<span class="lead-arrow">›</span>' : "") + '</article>';
+        (lead ? '<span class="lead-arrow" aria-hidden="true">' + ICON_CHEVRON + '</span>' : "") + '</article>';
     }).join("");
   }
   function renderReports() {
@@ -3707,7 +3734,6 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       if (result.error) { handleSaleError(result); return; }
       leadOpenedStatus = lead.status;
       saleExitDecision = "";
-      $("#leadModalEyebrow").textContent = "LEAD · " + lead.status.toUpperCase();
       updateSaleSectionVisibility();
     }
     if (pendingSingleField !== "leadStatus") {
@@ -3836,6 +3862,9 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   $$(".models-tab").forEach(function (button) {
     button.addEventListener("click", function () { setModelTab(button.dataset.modelTab); });
   });
+  $(".models-tabs").addEventListener("keydown", function (event) {
+    moveTabFocus(event, ".models-tab", function (tab) { tab.click(); });
+  });
   $("#modelsEditor").addEventListener("input", function () {
     setModelsDirtyState(true);
     renderModelsPreview();
@@ -3860,6 +3889,9 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       renderSitePromptTabs();
       renderSitePrompt();
     });
+  });
+  $(".site-prompt-tabs").addEventListener("keydown", function (event) {
+    moveTabFocus(event, ".site-prompt-tab", function (tab) { tab.click(); });
   });
   ["siteLinkGoogle", "siteLinkReview", "siteLinkPhone", "siteLinkInstagram", "siteLinkWebsite", "siteLinkProjectFolder", "siteLinkImagesFolder"].forEach(function (id) {
     const input = $("#" + id);
@@ -3909,7 +3941,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   $("#localMode").addEventListener("click", startLocalOnly);
   authForm.addEventListener("submit", async function (event) {
     event.preventDefault();
-    if (!supabase) await initializeAuth();
+    if (!supabase) await initializeAuth(true);
     if (!supabase) {
       const message = supabaseConfig.url && supabaseConfig.publishableKey
         ? "Não foi possível conectar ao serviço. Confira a internet ou use somente este navegador."
