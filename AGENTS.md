@@ -30,6 +30,14 @@ CRM de prospecção de clientes (placas NFC) para uso pessoal. App estático, se
   - Truque usado: gerar um `_test.html` temporário que injeta um estado em `localStorage` e imprime um `<pre id="report">` no DOM; ler com `--dump-dom`. **Remover o `_test.html` depois.**
 - Testar em várias larguras (ex.: 1200, 820, 560, 500) para garantir que não há overflow horizontal.
 
+## Busca automática (ponte local)
+- `scripts/buscar-leads.mjs` sobe uma ponte em `http://127.0.0.1:4176` (apenas loopback) com CORS para o Pages e para `localhost:4174`.
+- Atalho: duplo clique em `Abrir busca automatica.command`. O código de acesso é gravado em `~/.praca-crm-bridge-token` (nunca versionar).
+- A ponte roda `opencode run --format json --auto --dir "<projeto>" <prompt>` no projeto `pesquisa de leads avançada` (websearch do OpenCode), extrai a tabela Markdown e devolve ao CRM.
+- No app, a aba Prompt tem a caixa "Pesquisa automática" (endereço + código salvos só no `localStorage`). O botão "Pesquisar e importar" reaproveita `parseTable` + `importTable`, então duplicados caem na revisão.
+- Não colocar a chave `oc_sk_...` no código: a API de inferência do OpenCode não faz busca na web e a conta precisa de saldo. A busca real vem do OpenCode local.
+- Config por env: `PRACA_PROJECT_DIR`, `PRACA_BRIDGE_MODEL`, `PRACA_BRIDGE_TIMEOUT_SEC`, `PRACA_ALLOWED_ORIGINS`, `PRACA_BRIDGE_PORT`.
+
 ## Publicar (só com confirmação explícita)
 1. `git add` + commit pequeno com mensagem clara.
 2. `git push origin HEAD:main` (o branch de trabalho costuma ser `codex/...`; publica direto no `main`).

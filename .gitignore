@@ -7,3 +7,7 @@ supabase/.branches/
 # Flores decorativas (locais)
 flor.png
 flor.svg
+
+# Bases de leads e backups locais
+*.txt
+*.bak

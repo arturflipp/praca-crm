@@ -8,6 +8,8 @@
   const SYNC_META_PREFIX = "praca-crm-sync-v1:";
   const USER_STATE_PREFIX = "praca-crm-user-v1:";
   const REVIEW_CACHE_KEY = "praca-crm-review-cache-v1";
+  const BRIDGE_KEY = "praca-crm-bridge-v1";
+  const BRIDGE_DEFAULT_URL = "http://127.0.0.1:4176";
   const REVIEW_CACHE_TTL = 1000 * 60 * 60 * 24 * 30;
   const REVIEW_REMOTE_ENDPOINT = "https://r.jina.ai/";
   const REVIEW_REDIRECT_CHECKER = "https://api.redirect-checker.net/?url=";
@@ -1656,6 +1658,126 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     return String(text || "")
       .replace(/\[CATEGORIA\]/g, state.promptCategory.trim() || "[CATEGORIA]")
       .replace(/\[BAIRRO, CIDADE\]/g, state.promptLocation.trim() || "[BAIRRO, CIDADE]");
+  }
+  function readBridgeConfig() {
+    try {
+      const raw = localStorage.getItem(BRIDGE_KEY);
+      const data = raw ? JSON.parse(raw) : {};
+      const url = typeof data.url === "string" && data.url.trim() ? data.url.trim() : BRIDGE_DEFAULT_URL;
+      return { url: url.replace(/\/+$/, ""), token: typeof data.token === "string" ? data.token.trim() : "" };
+    } catch (_) {
+      return { url: BRIDGE_DEFAULT_URL, token: "" };
+    }
+  }
+  function saveBridgeConfig() {
+    try {
+      localStorage.setItem(BRIDGE_KEY, JSON.stringify({
+        url: $("#bridgeUrl").value.trim().replace(/\/+$/, ""),
+        token: $("#bridgeToken").value.trim()
+      }));
+    } catch (_) {}
+  }
+  function setBridgeStatus(message, kind) {
+    const status = $("#bridgeStatus");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("ok", kind === "ok");
+    status.classList.toggle("error", kind === "error");
+    const dot = $("#bridgeDot");
+    if (dot) dot.dataset.state = kind === "ok" ? "ok" : kind === "error" ? "err" : kind === "busy" ? "busy" : "";
+  }
+  function bridgeErrorMessage(error) {
+    if (error && error.name === "AbortError") return "A ponte demorou demais para responder.";
+    const message = String((error && error.message) || "");
+    if (/failed to fetch|networkerror|load failed|fetch failed/i.test(message)) {
+      return "Não encontrei a ponte. Abra o terminal da busca automática e confira o endereço.";
+    }
+    return message || "Não foi possível falar com a ponte.";
+  }
+  async function bridgeRequest(path, body, timeoutMs) {
+    const config = readBridgeConfig();
+    if (!config.url) throw new Error("Informe o endereço da ponte.");
+    const controller = new AbortController();
+    const timer = timeoutMs ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+    try {
+      const response = await fetch(config.url + path, {
+        method: body ? "POST" : "GET",
+        headers: Object.assign({ "X-Bridge-Token": config.token }, body ? { "Content-Type": "application/json" } : {}),
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal
+      });
+      let data = null;
+      try { data = await response.json(); } catch (_) {}
+      if (!response.ok) throw new Error((data && data.error) || "A ponte respondeu " + response.status + ".");
+      return data;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  async function testBridge() {
+    saveBridgeConfig();
+    const button = $("#bridgeTest");
+    button.disabled = true;
+    setBridgeStatus("Testando a ponte...", "busy");
+    try {
+      const data = await bridgeRequest("/health", null, 12000);
+      const project = data && data.project ? String(data.project).split("/").filter(Boolean).pop() : "";
+      setBridgeStatus("Conectado" + (project ? " ao projeto " + project : "") + ".", "ok");
+    } catch (error) {
+      setBridgeStatus(bridgeErrorMessage(error), "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+  async function searchLeadsAutomatically() {
+    const category = state.promptCategory.trim();
+    const location = state.promptLocation.trim();
+    if (!category || !location) {
+      setBridgeStatus("Preencha a categoria e o bairro/cidade antes de pesquisar.", "error");
+      (category ? $("#promptLocation") : $("#promptCategory")).focus();
+      return;
+    }
+    const prompt = readyPrompt();
+    if (!prompt || prompt.length < 20) {
+      setBridgeStatus("O prompt está vazio. Edite o comando antes de pesquisar.", "error");
+      return;
+    }
+    saveBridgeConfig();
+    const button = $("#bridgeSearch");
+    button.disabled = true;
+    const startedAt = Date.now();
+    const tick = function () {
+      setBridgeStatus("Pesquisando... " + Math.round((Date.now() - startedAt) / 1000) + "s. Pode levar alguns minutos.", "busy");
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    try {
+      const data = await bridgeRequest("/search", { prompt: prompt, category: category, location: location }, 20 * 60 * 1000);
+      if (!data || !data.text) throw new Error("A pesquisa voltou vazia.");
+      rememberPrompt(prompt);
+      $("#importText").value = data.text;
+      $("#importPanel").classList.remove("hidden");
+      setView("crm");
+      importTable();
+      const seconds = data.elapsedSec || Math.round((Date.now() - startedAt) / 1000);
+      if (data.tableFound) {
+        const summary = $("#importStatus");
+        setBridgeStatus("Pronto em " + seconds + "s. " + (summary ? summary.textContent : ""), "ok");
+      } else {
+        setBridgeStatus("Resposta recebida em " + seconds + "s, mas sem tabela. Confira o texto colado nos leads.", "error");
+      }
+    } catch (error) {
+      setBridgeStatus(bridgeErrorMessage(error), "error");
+    } finally {
+      clearInterval(timer);
+      button.disabled = false;
+    }
+  }
+  function renderBridge() {
+    const config = readBridgeConfig();
+    $("#bridgeUrl").value = config.url;
+    $("#bridgeToken").value = config.token;
+    setBridgeStatus(config.token ? "Ponte configurada. Toque em Testar." : "Informe o código que aparece no terminal.");
   }
   function renderPromptBlocks() {
     const blocks = Array.isArray(state.promptBlocks) ? state.promptBlocks : [];
@@ -3466,6 +3588,10 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     rememberPrompt(ready);
     copyText(ready, "Prompt pronto copiado.");
   });
+  $("#bridgeUrl").addEventListener("change", saveBridgeConfig);
+  $("#bridgeToken").addEventListener("change", saveBridgeConfig);
+  $("#bridgeTest").addEventListener("click", testBridge);
+  $("#bridgeSearch").addEventListener("click", searchLeadsAutomatically);
   $("#restorePrompt").addEventListener("click", function () {
     if (!window.confirm("Restaurar o texto original do prompt?")) return;
     state.promptText = defaultPrompt;
@@ -3986,5 +4112,6 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   setTheme(savedTheme, false);
   initializeAuth();
   renderAll();
+  renderBridge();
   try { setSidebarCollapsed(localStorage.getItem(SIDEBAR_KEY) === "true"); } catch (_) { setSidebarCollapsed(false); }
 })();

@@ -735,3 +735,21 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--focus);outline-o
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
 }
+
+.bridge-card{border-color:#dbe6d9;background:#f7faf5}
+.bridge-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bridge-head h3{margin:0}
+.bridge-dot{width:9px;height:9px;border-radius:50%;background:#c9c9c2;flex:none}
+.bridge-dot[data-state="ok"]{background:#70a77e}
+.bridge-dot[data-state="busy"]{background:#c08a43}
+.bridge-dot[data-state="err"]{background:#b75848}
+.bridge-fields{display:grid;gap:9px;margin-top:13px}
+.bridge-card label{font-size:10px;gap:5px}
+.bridge-card input{padding:8px 9px;font-size:11px}
+.bridge-actions{display:grid;grid-template-columns:auto 1fr;gap:6px;margin-top:11px}
+.bridge-actions .button{min-height:34px;padding:0 10px;font-size:11px}
+.bridge-actions .button[disabled]{opacity:.6;cursor:progress}
+.bridge-status{font-size:10px;line-height:1.5;color:var(--muted);margin:9px 0 0!important}
+.bridge-status.ok{color:var(--green)}
+.bridge-status.error{color:var(--red)}
+:root[data-theme="dark"] .bridge-card{background:#1e2621;border-color:#31453a}
