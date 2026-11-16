@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import path from "node:path";
+import { existsSync } from "node:fs";
 
 const PORT = Number(process.env.PRACA_BRIDGE_PORT || 4176);
 const HOST = "127.0.0.1";
@@ -12,7 +9,7 @@ const PROJECT_DIR = process.env.PRACA_PROJECT_DIR || "/Users/macbook/Documents/a
 const TIMEOUT_SEC = Number(process.env.PRACA_BRIDGE_TIMEOUT_SEC || 900);
 const MODEL = process.env.PRACA_BRIDGE_MODEL || "";
 const MAX_BODY = 300 * 1024;
-const TOKEN_FILE = path.join(homedir(), ".praca-crm-bridge-token");
+
 
 const extraOrigins = String(process.env.PRACA_ALLOWED_ORIGINS || "")
   .split(",")
@@ -26,18 +23,7 @@ const allowedOrigins = new Set([
   ...extraOrigins,
 ]);
 
-function ensureToken() {
-  if (process.env.PRACA_BRIDGE_TOKEN) return process.env.PRACA_BRIDGE_TOKEN;
-  try {
-    const stored = readFileSync(TOKEN_FILE, "utf8").trim();
-    if (stored) return stored;
-  } catch (_) {}
-  const token = randomBytes(24).toString("hex");
-  writeFileSync(TOKEN_FILE, token + "\n", { mode: 0o600 });
-  return token;
-}
-
-const TOKEN = ensureToken();
+const TOKEN = process.env.PRACA_BRIDGE_TOKEN || "";
 let busy = false;
 
 function isAllowedOrigin(origin) {
@@ -197,7 +183,7 @@ const server = createServer(async (req, res) => {
   const token = req.headers["x-bridge-token"] || url.searchParams.get("token") || "";
 
   if (url.pathname === "/health" && req.method === "GET") {
-    if (token !== TOKEN) {
+    if (TOKEN && token !== TOKEN) {
       send(res, 401, { error: "Código da ponte incorreto." }, origin);
       return;
     }
@@ -212,7 +198,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (url.pathname === "/search" && req.method === "POST") {
-    if (token !== TOKEN) {
+    if (TOKEN && token !== TOKEN) {
       send(res, 401, { error: "Código da ponte incorreto." }, origin);
       return;
     }
@@ -263,11 +249,20 @@ server.listen(PORT, HOST, () => {
   console.log(`  Endereço:  http://${HOST}:${PORT}`);
   console.log(`  Projeto:   ${PROJECT_DIR}`);
   console.log(`  Modelo:    ${MODEL || "padrão do OpenCode"}`);
-  console.log(`  Código:    ${TOKEN}`);
+  console.log(`  Código:    ${TOKEN || "não necessário (só este computador)"}`);
   console.log("");
-  console.log("  Cole o endereço e o código na aba Prompt do CRM.");
+  console.log("  No CRM, aba Prompt, clique em Testar e depois Pesquisar e importar.");
   console.log("  Deixe este terminal aberto durante a pesquisa. Ctrl+C encerra.");
   console.log("");
+});
+
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.log(`\n  A ponte já está rodando na porta ${PORT}. Pode usar o CRM.`);
+    process.exit(0);
+  }
+  console.error("\n  Falha ao iniciar a ponte:", error.message);
+  process.exit(1);
 });
 
 process.on("SIGINT", () => {

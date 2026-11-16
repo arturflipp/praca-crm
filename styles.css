@@ -753,3 +753,10 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--focus);outline-o
 .bridge-status.ok{color:var(--green)}
 .bridge-status.error{color:var(--red)}
 :root[data-theme="dark"] .bridge-card{background:#1e2621;border-color:#31453a}
+
+.bridge-advanced{margin-top:10px}
+.bridge-advanced summary{cursor:pointer;font-size:10px;color:var(--muted);font-weight:650;list-style:none}
+.bridge-advanced summary::-webkit-details-marker{display:none}
+.bridge-advanced summary::before{content:"+";display:inline-block;width:12px;margin-right:4px}
+.bridge-advanced[open] summary::before{content:"-"}
+.bridge-advanced .bridge-fields{margin-top:8px}

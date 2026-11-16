@@ -1700,9 +1700,12 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const controller = new AbortController();
     const timer = timeoutMs ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
     try {
+      const headers = {};
+      if (config.token) headers["X-Bridge-Token"] = config.token;
+      if (body) headers["Content-Type"] = "application/json";
       const response = await fetch(config.url + path, {
         method: body ? "POST" : "GET",
-        headers: Object.assign({ "X-Bridge-Token": config.token }, body ? { "Content-Type": "application/json" } : {}),
+        headers: headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal
       });
@@ -1773,11 +1776,24 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       button.disabled = false;
     }
   }
+  async function checkBridgeSilently() {
+    let configured = true;
+    try { configured = localStorage.getItem(BRIDGE_KEY) !== null; } catch (_) {}
+    if (!configured && location.protocol === "file:") return;
+    setBridgeStatus("Verificando a ponte...", "busy");
+    try {
+      const data = await bridgeRequest("/health", null, 6000);
+      if (data && data.busy) setBridgeStatus("Conectada. Já existe uma pesquisa rodando.", "busy");
+      else setBridgeStatus("Conectada. Pode pesquisar.", "ok");
+    } catch (error) {
+      setBridgeStatus("Ponte desligada. Abra o atalho \"Abrir busca automatica\" ou ligue o Mac de novo.", "error");
+    }
+  }
   function renderBridge() {
     const config = readBridgeConfig();
     $("#bridgeUrl").value = config.url;
     $("#bridgeToken").value = config.token;
-    setBridgeStatus(config.token ? "Ponte configurada. Toque em Testar." : "Informe o código que aparece no terminal.");
+    checkBridgeSilently();
   }
   function renderPromptBlocks() {
     const blocks = Array.isArray(state.promptBlocks) ? state.promptBlocks : [];

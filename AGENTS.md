@@ -32,9 +32,12 @@ CRM de prospecção de clientes (placas NFC) para uso pessoal. App estático, se
 
 ## Busca automática (ponte local)
 - `scripts/buscar-leads.mjs` sobe uma ponte em `http://127.0.0.1:4176` (apenas loopback) com CORS para o Pages e para `localhost:4174`.
-- Atalho: duplo clique em `Abrir busca automatica.command`. O código de acesso é gravado em `~/.praca-crm-bridge-token` (nunca versionar).
+- Instalação: `scripts/instalar-ponte.sh` cria um LaunchAgent (`br.com.praca.leads-bridge`) que inicia a ponte no login e reinicia se cair. Log em `~/Library/Logs/praca-leads-bridge.log`. Remover: `scripts/desinstalar-ponte.sh`.
+- Fallback manual: duplo clique em `Abrir busca automatica.command`. Se a porta já estiver em uso, a ponte avisa e sai.
+- Sem token por padrão (só escuta loopback e valida `Origin` + preflight). `PRACA_BRIDGE_TOKEN` é opcional e, se definido, passa a ser exigido.
 - A ponte roda `opencode run --format json --auto --dir "<projeto>" <prompt>` no projeto `pesquisa de leads avançada` (websearch do OpenCode), extrai a tabela Markdown e devolve ao CRM.
-- No app, a aba Prompt tem a caixa "Pesquisa automática" (endereço + código salvos só no `localStorage`). O botão "Pesquisar e importar" reaproveita `parseTable` + `importTable`, então duplicados caem na revisão.
+- No app, a aba Prompt tem a caixa "Pesquisa automática"; ela verifica a ponte sozinha ao abrir. O botão "Pesquisar e importar" reaproveita `parseTable` + `importTable`, então duplicados caem na revisão.
+- O LaunchAgent aponta para o caminho atual do repositório: se a pasta mudar de lugar, rode `scripts/instalar-ponte.sh` de novo.
 - Não colocar a chave `oc_sk_...` no código: a API de inferência do OpenCode não faz busca na web e a conta precisa de saldo. A busca real vem do OpenCode local.
 - Config por env: `PRACA_PROJECT_DIR`, `PRACA_BRIDGE_MODEL`, `PRACA_BRIDGE_TIMEOUT_SEC`, `PRACA_ALLOWED_ORIGINS`, `PRACA_BRIDGE_PORT`.
 

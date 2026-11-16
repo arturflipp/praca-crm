@@ -7,9 +7,9 @@
   <meta name="description" content="CRM de prospecção local para organizar leads, lembretes, vendas e prompts de placas NFC.">
   <title>Praça CRM — Prospecção local</title>
   <link rel="icon" href="flor.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=31">
+  <link rel="stylesheet" href="styles.css?v=32">
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=31" defer></script>
+  <script src="app.js?v=32" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -84,16 +84,19 @@
           <aside class="prompt-aside">
             <div class="aside-card bridge-card">
               <div class="bridge-head"><h3>Pesquisa automática</h3><span class="bridge-dot" id="bridgeDot" aria-hidden="true"></span></div>
-              <p>Pesquisa no seu Mac pelo OpenCode e importa a tabela direto no CRM. Deixe o terminal da ponte aberto.</p>
-              <div class="bridge-fields">
-                <label>Endereço da ponte<input id="bridgeUrl" placeholder="http://127.0.0.1:4176" spellcheck="false" autocomplete="off"></label>
-                <label>Código da ponte<input id="bridgeToken" placeholder="Código que aparece no terminal" spellcheck="false" autocomplete="off"></label>
-              </div>
+              <p>Pesquisa no seu Mac pelo OpenCode e importa a tabela direto no CRM. A ponte sobe sozinha ao ligar o Mac.</p>
               <div class="bridge-actions">
                 <button class="button button-secondary" id="bridgeTest" type="button">Testar</button>
                 <button class="button button-primary" id="bridgeSearch" type="button">Pesquisar e importar</button>
               </div>
-              <p class="bridge-status" id="bridgeStatus" role="status" aria-live="polite">Não conectado.</p>
+              <p class="bridge-status" id="bridgeStatus" role="status" aria-live="polite">Verificando a ponte...</p>
+              <details class="bridge-advanced">
+                <summary>Avançado</summary>
+                <div class="bridge-fields">
+                  <label>Endereço da ponte<input id="bridgeUrl" placeholder="http://127.0.0.1:4176" spellcheck="false" autocomplete="off"></label>
+                  <label>Código (opcional)<input id="bridgeToken" placeholder="Só se você configurou um" spellcheck="false" autocomplete="off"></label>
+                </div>
+              </details>
             </div>
             <div class="aside-card">
               <h3>Pesquise na sua IA</h3>
