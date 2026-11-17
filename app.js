@@ -1690,7 +1690,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (error && error.name === "AbortError") return "A ponte demorou demais para responder.";
     const message = String((error && error.message) || "");
     if (/failed to fetch|networkerror|load failed|fetch failed/i.test(message)) {
-      return "Não encontrei a ponte. Abra o terminal da busca automática e confira o endereço.";
+      return "Não consegui falar com a ponte. Confira se o Mac está ligado e, se o navegador pediu acesso à rede local, toque em Permitir.";
     }
     return message || "Não foi possível falar com a ponte.";
   }
@@ -1786,7 +1786,13 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       if (data && data.busy) setBridgeStatus("Conectada. Já existe uma pesquisa rodando.", "busy");
       else setBridgeStatus("Conectada. Pode pesquisar.", "ok");
     } catch (error) {
-      setBridgeStatus("Ponte desligada. Abra o atalho \"Abrir busca automatica\" ou ligue o Mac de novo.", "error");
+      await new Promise(function (resolve) { setTimeout(resolve, 2500); });
+      try {
+        await bridgeRequest("/health", null, 8000);
+        setBridgeStatus("Conectada. Pode pesquisar.", "ok");
+      } catch (retryError) {
+        setBridgeStatus("Ponte desligada ou acesso à rede local bloqueado. Se o navegador pediu permissão, toque em Permitir e em Testar.", "error");
+      }
     }
   }
   function renderBridge() {
