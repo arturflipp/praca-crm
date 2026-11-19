@@ -1047,6 +1047,8 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible,[role="radio"
 .appearance-advanced-toggle{justify-self:start}
 .appearance-advanced-group{display:grid;gap:6px;padding-top:8px}
 .appearance-advanced-group h4{margin:0;font-size:11px;font-weight:750;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.appearance-editing{margin:0;font-size:11px;line-height:1.5;color:var(--green)}
+.appearance-editing[hidden]{display:none}
 .appearance-save-theme{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
 .appearance-save-theme .button{min-height:40px}
 .appearance-themes{display:grid;gap:6px}

@@ -106,9 +106,9 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=36">
+  <link rel="stylesheet" href="styles.css?v=37">
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=36" defer></script>
+  <script src="app.js?v=37" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -596,6 +596,7 @@
         </section>
         <section class="appearance-group">
           <div class="appearance-group-head"><h3>Meus temas</h3><p>Salve a combinação atual e volte a ela quando quiser.</p></div>
+          <p class="appearance-editing" id="appearanceEditingTheme" hidden></p>
           <div class="appearance-save-theme">
             <input id="appearanceThemeName" type="text" maxlength="40" placeholder="Nome do tema" aria-label="Nome do novo tema">
             <button class="button button-secondary" id="appearanceThemeSave" type="button">Salvar tema</button>

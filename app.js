@@ -1290,8 +1290,18 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     writeAppearanceCache(state.appearance);
     saveState();
   }
+  function syncActiveAppearanceTheme() {
+    const appearance = normalizeAppearance(state.appearance);
+    if (!appearance.activeThemeId) return;
+    const themes = appearance.customThemes.map(function (theme) {
+      if (theme.id !== appearance.activeThemeId) return theme;
+      return Object.assign({}, theme, { scheme: appearance.scheme, accent: appearance.accent, colors: Object.assign({}, appearance.colors) });
+    });
+    state.appearance = normalizeAppearance(Object.assign({}, appearance, { customThemes: themes }));
+  }
   function updateAppearance(patch, persist) {
     state.appearance = normalizeAppearance(Object.assign({}, state.appearance, patch));
+    syncActiveAppearanceTheme();
     applyAppearance(state.appearance, true);
     renderAppearance();
     if (persist) scheduleAppearanceSave();
@@ -1377,6 +1387,12 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     }).join("");
     const empty = $("#appearanceThemesEmpty");
     if (empty) empty.hidden = appearance.customThemes.length > 0;
+    const editing = $("#appearanceEditingTheme");
+    if (editing) {
+      const activeTheme = appearance.customThemes.find(function (theme) { return theme.id === appearance.activeThemeId; });
+      editing.textContent = activeTheme ? 'Editando "' + activeTheme.name + '". As mudanças são salvas nele automaticamente.' : "";
+      editing.hidden = !activeTheme;
+    }
   }
   function refreshAppearanceColorRow(token) {
     const rows = document.querySelectorAll('[data-color-row="' + token + '"]');
@@ -1399,7 +1415,8 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (!clean) return;
     const colors = Object.assign({}, state.appearance.colors);
     colors[token] = clean;
-    state.appearance = normalizeAppearance(Object.assign({}, state.appearance, { colors: colors, activeThemeId: "" }));
+    state.appearance = normalizeAppearance(Object.assign({}, state.appearance, { colors: colors }));
+    syncActiveAppearanceTheme();
     applyAppearance(state.appearance, true);
     refreshAppearanceColorRow(token);
     if (persist) scheduleAppearanceSave();
@@ -1408,7 +1425,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (!APPEARANCE_COLOR_TOKENS[token] || !state.appearance.colors[token]) return;
     const colors = Object.assign({}, state.appearance.colors);
     delete colors[token];
-    updateAppearance({ colors: colors, activeThemeId: "" }, true);
+    updateAppearance({ colors: colors }, true);
   }
   function saveAppearanceTheme() {
     const input = $("#appearanceThemeName");
@@ -1453,7 +1470,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const value = String(hex || "").toLowerCase();
     const colors = Object.assign({}, appearance.colors);
     APPEARANCE_ACCENT_TOKENS.forEach(function (token) { delete colors[token]; });
-    updateAppearance({ accent: value === accents[0] ? "" : value, colors: colors, activeThemeId: "" }, true);
+    updateAppearance({ accent: value === accents[0] ? "" : value, colors: colors }, true);
   }
   function renderAppearance() {
     const dialog = $("#appearanceDialog");
@@ -1503,7 +1520,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   function setTheme(theme, persist) {
     const current = normalizeAppearance(state.appearance);
     const target = theme === "light" ? "papel" : (current.scheme === "papel" ? current.lastDarkScheme : current.scheme);
-    state.appearance = normalizeAppearance(Object.assign({}, current, { scheme: target, lastDarkScheme: target === "papel" ? current.lastDarkScheme : target }));
+    state.appearance = normalizeAppearance(Object.assign({}, current, { scheme: target, lastDarkScheme: target === "papel" ? current.lastDarkScheme : target, colors: {}, activeThemeId: "" }));
     applyAppearance(state.appearance, true);
     renderAppearance();
     if (persist) scheduleAppearanceSave();
