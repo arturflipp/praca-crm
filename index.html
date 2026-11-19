@@ -5,16 +5,99 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111012">
   <meta name="description" content="CRM de prospecção local para organizar leads, lembretes, vendas e prompts de placas NFC.">
-  <title>Praça CRM — Prospecção local</title>
-  <link rel="icon" href="flor.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=33">
+  <title>art.crm</title>
+  <link rel="icon" href="data:,">
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem("art-crm-appearance-v1");
+        var app = raw ? JSON.parse(raw) : null;
+        var schemes = ["floresta", "grafite", "petroleo", "vinho", "bronze", "oliva", "papel"];
+        var densities = ["compacta", "confortavel", "espacada"];
+        var scheme = app && schemes.indexOf(app.scheme) >= 0 ? app.scheme : "floresta";
+        if ((!app || !app.scheme) && localStorage.getItem("praca-crm-theme-v1") === "light") scheme = "papel";
+        var density = app && densities.indexOf(app.density) >= 0 ? app.density : "confortavel";
+        var radius = app ? Number(app.radius) : 12;
+        if (!isFinite(radius)) radius = 12;
+        radius = Math.min(20, Math.max(0, Math.round(radius)));
+        var contrast = app && app.contrast != null ? Number(app.contrast) : 50;
+        if (!isFinite(contrast)) contrast = 50;
+        contrast = Math.min(100, Math.max(0, Math.round(contrast)));
+        var palette = {
+          floresta: ["#0c1210", "#151c18", "#edf3ee", "#a1aea4", "#202b24"],
+          grafite: ["#121110", "#1a1917", "#f1eee9", "#aca69e", "#282521"],
+          petroleo: ["#0c1214", "#131b1e", "#e9f1f2", "#9fadb1", "#1e2a2f"],
+          vinho: ["#130f11", "#1b1619", "#f2ecee", "#b0a3a7", "#2b2327"],
+          bronze: ["#12100c", "#1a1712", "#f3eee4", "#b1a794", "#2a251c"],
+          oliva: ["#10110d", "#181a14", "#eff2e7", "#a8ae99", "#282c1f"],
+          papel: ["#f4f2ec", "#ffffff", "#1e241e", "#676d63", "#eeede6"]
+        }[scheme];
+        function rgb(value) {
+          var number = parseInt(value.slice(1), 16);
+          return [number >> 16 & 255, number >> 8 & 255, number & 255];
+        }
+        function mix(first, second, weight) {
+          var a = rgb(first);
+          var b = rgb(second);
+          return "#" + a.map(function (value, index) { return Math.round(value + (b[index] - value) * weight).toString(16).padStart(2, "0"); }).join("");
+        }
+        function luminance(value) {
+          var channels = rgb(value).map(function (value) { var channel = value / 255; return channel <= .03928 ? channel / 12.92 : Math.pow((channel + .055) / 1.055, 2.4); });
+          return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+        }
+        function ratio(first, second) {
+          var a = luminance(first);
+          var b = luminance(second);
+          return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+        }
+        var root = document.documentElement;
+        root.dataset.scheme = scheme;
+        root.dataset.theme = scheme === "papel" ? "light" : "dark";
+        root.dataset.density = density;
+        root.style.setProperty("--radius-user", radius + "px");
+        var light = scheme === "papel";
+        var canvas = palette[0];
+        var ink = palette[2];
+        var muted = palette[3];
+        if (contrast !== 50) {
+          var weight = Math.abs(contrast - 50) / 50;
+          var adjusted = muted;
+          if (contrast > 50) adjusted = mix(muted, ink, Math.min(.92, weight * .92));
+          else {
+            var surface = palette[4];
+            var amount = Math.min(.28, weight * .28);
+            var candidate = mix(muted, canvas, amount);
+            while (amount > 0 && ratio(candidate, surface) < 4.5) {
+              amount = Math.max(0, amount - .02);
+              candidate = mix(muted, canvas, amount);
+            }
+            adjusted = candidate;
+          }
+          if (adjusted !== muted) root.style.setProperty("--muted", adjusted);
+        }
+        var accent = app && typeof app.accent === "string" && /^#[0-9a-f]{6}$/i.test(app.accent) ? app.accent.toLowerCase() : "";
+        if (accent) {
+          var dark = mix(accent, "#000000", light ? .15 : .08);
+          var focusRgb = rgb(light ? dark : accent);
+          root.style.setProperty("--green", accent);
+          root.style.setProperty("--green-dark", dark);
+          root.style.setProperty("--green-soft", mix(light ? "#ffffff" : canvas, accent, light ? .08 : .12));
+          root.style.setProperty("--focus", "rgba(" + focusRgb.join(",") + "," + (light ? .72 : .62) + ")");
+          root.style.setProperty("--accent-text", ratio("#0b1710", accent) >= ratio("#ffffff", accent) ? "#0b1710" : "#ffffff");
+        }
+        var themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) themeColor.content = canvas;
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css?v=34">
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=33" defer></script>
+  <script src="app.js?v=34" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
     <form id="authForm" class="auth-card">
-      <div class="auth-brand"><span class="brand-mark">P</span><span><strong>praça</strong><small>CRM DE PROSPECÇÃO</small></span></div>
+      <div class="auth-brand"><span><strong>art.crm</strong><small>CRM DE PROSPECÇÃO</small></span></div>
       <h1 id="authTitle">Entre no seu CRM</h1>
       <p id="authDescription">Acesse sua conta para sincronizar leads, lembretes e prompts.</p>
       <label>E-mail<input id="authEmail" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>
@@ -27,8 +110,8 @@
   </section>
   <div class="app-shell">
     <aside class="sidebar">
-      <a class="brand" href="#" aria-label="Praça CRM, início">
-        <span class="brand-mark">P</span><span><strong>praça</strong><small>CRM LOCAL</small></span>
+      <a class="brand" href="#" aria-label="art.crm, início">
+        <span><strong>art.crm</strong></span>
       </a>
       <div class="workspace-label">PROSPECÇÃO</div>
       <nav class="primary-nav" aria-label="Navegação principal">
@@ -48,41 +131,21 @@
     <main class="main-area">
       <header class="topbar">
         <div class="topbar-left"><button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Recolher menu" aria-expanded="true" title="Recolher menu"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="breadcrumb"><span>Prospecção</span><span class="crumb-slash">/</span><strong id="topTitle">Prompt de pesquisa</strong></div></div>
-        <div class="topbar-right"><button id="themeToggle" class="theme-toggle" type="button" aria-label="Ativar tema claro" title="Ativar tema claro"><span class="theme-icon" aria-hidden="true"><svg class="icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg><svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="theme-toggle-label">Claro</span></button><span id="syncStatus" class="sync-pill"><span class="status-dot"></span><span>Conectando</span></span><span id="accountEmail" class="account-email"></span><button id="signOut" class="sign-out-button" type="button">Sair</button></div>
+        <div class="topbar-right"><button id="appearanceToggle" class="sidebar-toggle appearance-toggle" type="button" aria-label="Personalizar aparência" title="Personalizar aparência"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 0 0 18h1.2a1.5 1.5 0 0 0 0-3h-.6a1.6 1.6 0 0 1 0-3.2H18a3.8 3.8 0 0 0 0-7.6h-6z"/><circle cx="8" cy="8.6" r=".8"/><circle cx="11.7" cy="6.3" r=".8"/><circle cx="15.4" cy="8.6" r=".8"/></svg></button><button id="themeToggle" class="theme-toggle" type="button" aria-label="Ativar tema claro" title="Ativar tema claro"><span class="theme-icon" aria-hidden="true"><svg class="icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg><svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="theme-toggle-label">Claro</span></button><span id="syncStatus" class="sync-pill"><span class="status-dot"></span><span>Conectando</span></span><span id="accountEmail" class="account-email"></span><button id="signOut" class="sign-out-button" type="button">Sair</button></div>
       </header>
 
       <section class="page-view active" id="view-prompt">
         <div class="page-heading">
-          <div><h1>Monte sua lista de comércios</h1><p>Prepare o pedido, pesquise numa IA externa e traga a tabela de volta para o CRM.</p></div>
+          <div><h1>Monte sua lista de comércios</h1><p>Defina a busca, pesquise e traga a tabela de volta para o CRM.</p></div>
         </div>
-        <div class="prompt-layout">
+        <div class="prompt-flow">
           <div class="panel prompt-panel">
-            <div class="panel-heading"><div><span class="step-badge">1</span><div><h2>Defina a região e o tipo de negócio</h2><p>O prompt usa esses dados para orientar a pesquisa.</p></div></div></div>
+            <div class="panel-heading"><div><span class="step-badge">1</span><div><h2>Pesquise os comércios</h2><p>Defina o tipo de negócio e a região. A pesquisa usa o OpenCode no seu Mac.</p></div></div></div>
             <div class="form-grid two-col">
               <label>Categoria do comércio<input id="promptCategory" placeholder="Ex.: barbearias"></label>
               <label>Bairro e cidade<input id="promptLocation" placeholder="Ex.: Gonzaga, Santos"></label>
             </div>
-            <div class="section-label prompt-label"><span>PERSONALIZE O COMANDO</span><button class="text-button" id="restorePrompt">Restaurar modelo original</button></div>
-            <p class="prompt-customize-help">Cada parte tem uma função. Abra uma seção para ajustar suas instruções; o comando completo é atualizado automaticamente.</p>
-            <div id="promptSections" class="prompt-sections"></div>
-            <details class="prompt-full-editor">
-              <summary>Ver ou editar o comando completo</summary>
-              <label class="sr-only" for="promptEditor">Editar o comando completo</label>
-              <textarea id="promptEditor" class="prompt-editor" spellcheck="false" aria-label="Editar o comando completo"></textarea>
-            </details>
-            <details class="prompt-history" id="promptHistory">
-              <summary>Histórico de prompts <span id="promptHistoryCount">0/10</span></summary>
-              <p class="history-help">Os 10 prompts mais recentes que você salvou ou copiou ficam na sua conta.</p>
-              <div id="promptHistoryList" class="prompt-history-list"></div>
-            </details>
-            <div class="panel-footer">
-              <span class="helper"><span class="info-dot">i</span> <span id="promptSaveHint">Alterações são salvas automaticamente na sua conta.</span> A IA precisa estar com busca na web ativada.</span>
-              <button class="button button-secondary" id="savePromptHistory" type="button">Salvar versão</button>
-              <button class="button button-primary" id="copyPrompt"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg> Copiar prompt pronto</button>
-            </div>
-          </div>
-          <aside class="prompt-aside">
-            <div class="aside-card bridge-card">
+            <div class="bridge-inline">
               <div class="bridge-head"><h3>Pesquisa automática</h3><span class="bridge-dot" id="bridgeDot" aria-hidden="true"></span></div>
               <p>Pesquisa no seu Mac pelo OpenCode e importa a tabela direto no CRM. A ponte sobe sozinha ao ligar o Mac.</p>
               <div class="bridge-actions">
@@ -98,65 +161,93 @@
                 </div>
               </details>
             </div>
-            <div class="aside-card">
-              <h3>Pesquise na sua IA</h3>
-              <p>Abra a ferramenta que preferir, cole o prompt e peça uma tabela com os resultados encontrados.</p>
-              <div class="ai-shortcuts"><a href="https://chatgpt.com/" target="_blank" rel="noreferrer">Abrir ChatGPT <svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a><a href="https://claude.ai/new" target="_blank" rel="noreferrer">Abrir Claude <svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></a></div>
+            <div class="panel-footer prompt-step-footer">
+              <span class="helper">A pesquisa precisa de busca na web ativada.</span>
+              <button class="button button-primary" id="copyPrompt"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg> Copiar prompt pronto</button>
             </div>
-            <div class="aside-card muted-card">
-              <h3>Traga os resultados</h3>
-              <p>Na aba Leads, cole a tabela. O CRM organiza os dados e calcula a diferença de avaliações.</p>
-              <button class="button button-secondary button-wide" data-go="crm">Ir para os leads <svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></button>
+          </div>
+          <div class="panel prompt-panel">
+            <div class="panel-heading"><div><span class="step-badge">2</span><div><h2>Traga os resultados</h2><p>Cole a tabela que a IA devolveu. Leads novos entram direto; duplicados ficam para revisão.</p></div></div></div>
+            <label class="sr-only" for="promptImportText">Tabela de resultados</label>
+            <textarea id="promptImportText" class="import-text prompt-import-text" placeholder="| Comércio | Telefone | Link do Google | Avaliações | Nota | Concorrente | Avaliações do concorrente | Abordagem | Script |
+| Barbearia Exemplo | 13999990000 | não encontrado | 31 | 4,8 | Barbearia Centro | 280 | Oi, tudo bem?... | 1. Primeira mensagem: ... ### 2. ... |"></textarea>
+            <p id="promptImportStatus" class="helper prompt-import-status" aria-live="polite"></p>
+            <div class="import-footer prompt-import-footer"><button class="button button-primary" id="promptImportLeads" type="button">Analisar e trazer para os leads</button></div>
+            <p class="prompt-tip">Confira telefone, nota e avaliações antes de entrar em contato. A pesquisa pode trazer dados incompletos.</p>
+          </div>
+          <details class="panel prompt-advanced" id="promptAdvanced">
+            <summary><span>Personalizar o comando</span><small>Texto, seções e histórico</small></summary>
+            <div class="prompt-advanced-body">
+              <div class="section-label prompt-label"><span>SEÇÕES DO COMANDO</span><button class="text-button" id="restorePrompt">Restaurar modelo original</button></div>
+              <p class="prompt-customize-help">Cada parte tem uma função. Abra uma seção para ajustar suas instruções; o comando completo é atualizado automaticamente.</p>
+              <div id="promptSections" class="prompt-sections"></div>
+              <details class="prompt-full-editor">
+                <summary>Ver ou editar o comando completo</summary>
+                <label class="sr-only" for="promptEditor">Editar o comando completo</label>
+                <textarea id="promptEditor" class="prompt-editor" spellcheck="false" aria-label="Editar o comando completo"></textarea>
+              </details>
+              <details class="prompt-history" id="promptHistory">
+                <summary>Histórico de prompts <span id="promptHistoryCount">0/10</span></summary>
+                <p class="history-help">Os 10 prompts mais recentes que você salvou ou copiou ficam na sua conta.</p>
+                <div id="promptHistoryList" class="prompt-history-list"></div>
+              </details>
+              <div class="panel-footer">
+                <span class="helper"><span class="info-dot">i</span> <span id="promptSaveHint">Alterações são salvas automaticamente na sua conta.</span></span>
+                <button class="button button-secondary" id="savePromptHistory" type="button">Salvar versão</button>
+              </div>
             </div>
-            <div class="tip-card"><span class="tip-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z"/></svg></span><p>Confira telefone, nota e avaliações antes de entrar em contato. A pesquisa pode trazer dados incompletos.</p></div>
-          </aside>
+          </details>
         </div>
       </section>
 
-      <section class="page-view" id="view-crm">
+      <section class="page-view view-narrow" id="view-crm">
         <div class="page-heading crm-heading">
           <div><h1>Seus leads</h1><p>Organize cada oportunidade, registre como conheceu o comércio e acompanhe os próximos passos.</p></div>
-          <div class="heading-actions"><button class="button button-secondary" id="analyzeDuplicates"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg> Analisar duplicados</button><button class="button button-secondary" id="toggleImport"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> Colar tabela</button><button class="button button-primary" id="newLead"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Adicionar lead</button></div>
+          <div class="heading-actions"><button class="button button-secondary" id="analyzeDuplicates"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg> Analisar duplicados</button><button class="button button-secondary" id="toggleImport"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg> Importar tabela</button><button class="button button-primary" id="newLead"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Adicionar lead</button></div>
         </div>
-        <div class="stats-row">
-          <article class="stat-card"><span>Total de leads</span><strong id="statTotal">0</strong><small>na sua lista</small></article>
-          <article class="stat-card"><span>Em conversa</span><strong id="statActive">0</strong><small>contatados ou em proposta</small></article>
-          <article class="stat-card"><span>Vendidos</span><strong id="statWon">0</strong><small id="statWonHint">sem valor informado</small></article>
-          <article class="stat-card stat-card-highlight"><span>Próximos lembretes</span><strong id="statReminders">0</strong><small>pendentes</small></article>
+        <div class="lead-summary" aria-label="Resumo dos leads">
+          <span class="lead-summary-item"><strong id="statTotal">0</strong> <span id="statTotalLabel">leads</span></span>
+          <span class="lead-summary-dot" aria-hidden="true">·</span>
+          <span class="lead-summary-item"><strong id="statActive">0</strong> em conversa</span>
+          <span class="lead-summary-dot" aria-hidden="true">·</span>
+          <span class="lead-summary-item"><strong id="statWon">0</strong> <span id="statWonLabel">vendidos</span> <small id="statWonHint">(sem valor)</small></span>
+          <span class="lead-summary-dot" aria-hidden="true">·</span>
+          <span class="lead-summary-item"><strong id="statReminders">0</strong> lembretes</span>
         </div>
-        <section class="panel import-panel hidden" id="importPanel">
-          <div class="import-heading"><div><span class="step-badge">A</span><div><h2>Importar a tabela da IA</h2><p>Cole a tabela Markdown. Leads novos entram no CRM automaticamente; nos possíveis duplicados você escolhe, campo por campo, o que deve entrar em cada ficha.</p></div></div><button class="icon-button" id="closeImport" aria-label="Fechar importação"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+        <section id="duplicateReview" class="duplicate-review duplicate-review-panel hidden">
+          <div id="duplicateSummary" class="duplicate-summary" aria-live="polite"></div>
+          <div class="dup-bulk-actions">
+            <span>Para todos os duplicados:</span>
+            <button class="dup-quick" type="button" data-import-bulk="keep">Manter todos</button>
+            <button class="dup-quick" type="button" data-import-bulk="fill">Completar todos os vazios</button>
+            <button class="dup-quick" type="button" data-import-bulk="all">Usar tudo da tabela em todos</button>
+          </div>
+          <div id="duplicateList" class="duplicate-list"></div>
+          <div class="duplicate-actions"><button class="button button-secondary" id="cancelImportReview" type="button">Ignorar duplicados</button><button class="button button-primary" id="applyImport" type="button">Aplicar campos escolhidos</button></div>
+        </section>
+        <div class="import-hidden" hidden>
           <label class="sr-only" for="importText">Tabela de resultados</label>
           <textarea id="importText" class="import-text" placeholder="| Comércio | Telefone | Link do Google | Avaliações | Nota | Concorrente | Avaliações do concorrente | Abordagem | Script |
 | Barbearia Exemplo | 13999990000 | não encontrado | 31 | 4,8 | Barbearia Centro | 280 | Oi, tudo bem?... | 1. Primeira mensagem: ... ### 2. ... |"></textarea>
-          <section id="duplicateReview" class="duplicate-review hidden" aria-live="polite">
-            <div id="duplicateSummary" class="duplicate-summary"></div>
-            <div class="dup-bulk-actions">
-              <span>Para todos os duplicados:</span>
-              <button class="dup-quick" type="button" data-import-bulk="keep">Manter todos</button>
-              <button class="dup-quick" type="button" data-import-bulk="fill">Completar todos os vazios</button>
-              <button class="dup-quick" type="button" data-import-bulk="all">Usar tudo da tabela em todos</button>
-            </div>
-            <div id="duplicateList" class="duplicate-list"></div>
-            <div class="duplicate-actions"><button class="button button-secondary" id="cancelImportReview" type="button">Ignorar duplicados</button><button class="button button-primary" id="applyImport" type="button">Aplicar campos escolhidos</button></div>
-          </section>
-          <div class="import-footer"><div id="importStatus" class="helper" aria-live="polite">Ao analisar, leads novos serão adicionados; só duplicados ficarão para revisão.</div><button class="button button-primary" id="importLeads">Analisar e adicionar</button></div>
-        </section>
-        <section class="panel existing-duplicate-panel hidden" id="existingDuplicatePanel" aria-live="polite">
-          <div class="duplicate-scan-heading"><div><h2>Duplicados na sua lista</h2><p id="existingDuplicateSummary"></p></div><button class="icon-button" id="closeExistingDuplicatePanel" type="button" aria-label="Fechar análise"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+          <div id="importStatus" class="helper" aria-live="polite">Ao analisar, leads novos serão adicionados; só duplicados ficarão para revisão.</div>
+          <button class="button button-primary" id="importLeads" type="button">Analisar e adicionar</button>
+          <button class="icon-button" id="closeImport" type="button" aria-label="Fechar importação"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+        <section class="panel existing-duplicate-panel hidden" id="existingDuplicatePanel">
+          <div class="duplicate-scan-heading"><div><h2>Duplicados na sua lista</h2><p id="existingDuplicateSummary" aria-live="polite"></p></div><button class="icon-button" id="closeExistingDuplicatePanel" type="button" aria-label="Fechar análise"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
           <div id="existingDuplicateList" class="existing-duplicate-list"></div>
         </section>
         <section class="panel leads-panel">
           <div class="lead-toolbar">
             <div class="filter-tabs" role="group" aria-label="Filtrar leads">
-              <button class="filter-tab active" data-status="Todos">Todos <span id="filterCountTodos">0</span></button>
-              <button class="filter-tab" data-status="Novo">Novo</button>
-              <button class="filter-tab" data-status="Mandei">Mandei</button>
-              <button class="filter-tab" data-status="Respondeu">Respondeu</button>
-              <button class="filter-tab" data-status="Proposta">Proposta</button>
-              <button class="filter-tab" data-status="Vendido">Vendido</button>
-              <button class="filter-tab" data-status="Sem resposta">Sem resposta</button>
-              <button class="filter-tab" data-status="Recusa">Recusa</button>
+              <button class="filter-tab active" data-status="Todos" aria-pressed="true">Todos <span id="filterCountTodos">0</span></button>
+              <button class="filter-tab" data-status="Novo" aria-pressed="false">Novo</button>
+              <button class="filter-tab" data-status="Mandei" aria-pressed="false">Mandei</button>
+              <button class="filter-tab" data-status="Respondeu" aria-pressed="false">Respondeu</button>
+              <button class="filter-tab" data-status="Proposta" aria-pressed="false">Proposta</button>
+              <button class="filter-tab" data-status="Vendido" aria-pressed="false">Vendido</button>
+              <button class="filter-tab" data-status="Sem resposta" aria-pressed="false">Sem resposta</button>
+              <button class="filter-tab" data-status="Recusa" aria-pressed="false">Recusa</button>
             </div>
             <label class="search-box"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg><input id="leadSearch" name="leadSearch" placeholder="Buscar comércio..." aria-label="Buscar leads"></label>
             <div class="lead-toolbar-filters">
@@ -167,31 +258,34 @@
             </div>
           </div>
           <div id="leadList" class="lead-list"></div>
-          <div id="emptyLeads" class="empty-state"><div class="empty-illustration"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></div><h2>Sua lista começa aqui</h2><p>Cole uma tabela gerada pela IA ou adicione um comércio manualmente.</p><div><button class="button button-secondary" id="emptyImport">Colar tabela</button><button class="button button-primary" id="emptyAdd">Adicionar lead</button></div></div>
+          <div id="emptyLeads" class="empty-state"><div class="empty-illustration"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></div><h2>Sua lista começa aqui</h2><p>Adicione um comércio manualmente ou importe uma tabela pela aba Prompt.</p><div><button class="button button-primary" id="emptyAdd">Adicionar lead</button></div></div>
           <div id="noResults" class="empty-small hidden">Nenhum lead corresponde a esse filtro.</div>
         </section>
       </section>
 
-      <section class="page-view" id="view-agenda">
+      <section class="page-view view-narrow" id="view-agenda">
         <div class="page-heading crm-heading">
           <div><h1>Lembretes e visitas</h1><p>Registre retornos, visitas e próximos passos ligados a cada lead.</p></div>
           <button class="button button-primary" id="newReminder"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Novo lembrete</button>
         </div>
-        <div class="agenda-intro"><span class="agenda-icon"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span><div><strong>Uma agenda simples, junto com seus leads</strong><p id="agendaStorageHint">Seus lembretes sincronizam na conta e aparecem aqui por data.</p></div></div>
-        <div class="agenda-filters"><button class="agenda-filter active" data-agenda="upcoming">Próximos</button><button class="agenda-filter" data-agenda="all">Todos</button><button class="agenda-filter" data-agenda="done">Concluídos</button></div>
+        <p class="agenda-storage-hint" id="agendaStorageHint">Seus lembretes sincronizam na conta e aparecem aqui por data.</p>
+        <div class="agenda-filters" role="group" aria-label="Filtrar lembretes"><button class="agenda-filter active" data-agenda="upcoming" aria-pressed="true">Próximos <span id="agendaCountUpcoming">0</span></button><button class="agenda-filter" data-agenda="all" aria-pressed="false">Todos <span id="agendaCountAll">0</span></button><button class="agenda-filter" data-agenda="done" aria-pressed="false">Concluídos <span id="agendaCountDone">0</span></button></div>
         <div id="reminderList" class="reminder-list"></div>
-        <div id="emptyAgenda" class="empty-state"><div class="empty-illustration"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></div><h2>Nenhum lembrete por enquanto</h2><p>Crie um lembrete para uma visita, retorno ou detalhe importante de uma venda.</p><button class="button button-primary" id="emptyReminder">Criar lembrete</button></div>
+        <div id="emptyAgenda" class="empty-state"><div class="empty-illustration"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></div><h2>Nenhum lembrete por enquanto</h2><p>Crie um lembrete para uma visita, retorno ou detalhe importante de uma venda.</p></div>
       </section>
 
-      <section class="page-view" id="view-reports">
+      <section class="page-view view-wide" id="view-reports">
         <div class="page-heading crm-heading">
-          <div><h1>Relatórios</h1><p>Acompanhe por dia as mensagens enviadas, recusas, sem resposta, leads em aberto e vendas.</p></div>
-          <div class="report-period" id="reportPeriod" role="group" aria-label="Período do relatório">
-            <button class="report-period-button" data-period="today">Hoje</button>
-            <button class="report-period-button active" data-period="7">7 dias</button>
-            <button class="report-period-button" data-period="30">30 dias</button>
-            <button class="report-period-button" data-period="month">Este mês</button>
-            <button class="report-period-button" data-period="all">Tudo</button>
+          <div><h1>Relatórios</h1><p>Acompanhe por dia mensagens, respostas, recusas e vendas.</p></div>
+          <div class="report-period-block">
+            <div class="report-period" id="reportPeriod" role="group" aria-label="Período do relatório">
+              <button class="report-period-button" data-period="today" aria-pressed="false">Hoje</button>
+              <button class="report-period-button active" data-period="7" aria-pressed="true">7 dias</button>
+              <button class="report-period-button" data-period="30" aria-pressed="false">30 dias</button>
+              <button class="report-period-button" data-period="month" aria-pressed="false">Este mês</button>
+              <button class="report-period-button" data-period="all" aria-pressed="false">Tudo</button>
+            </div>
+            <p class="report-open-now" id="reportOpenNow">Em aberto agora: 0</p>
           </div>
         </div>
         <div class="stats-row report-cards" id="reportCards"></div>
@@ -200,8 +294,8 @@
           <div class="report-chart" id="reportChart"></div>
         </section>
         <section class="panel report-panel">
-          <div class="panel-heading report-heading"><div><h2>Resumo diário</h2><p>Respostas + recusas + sem resposta + aguardando = mensagens enviadas. Conversão do dia = vendas ÷ mensagens.</p></div></div>
-          <div class="report-table-wrap"><table class="report-table" id="reportTable"></table></div>
+          <div class="panel-heading report-heading"><div><h2>Resumo diário</h2><p>Cada linha fecha as mensagens do dia.</p></div></div>
+          <div class="report-table-wrap" role="region" tabindex="0" aria-label="Tabela do relatório"><table class="report-table" id="reportTable"></table></div>
         </section>
         <section class="panel report-panel">
           <div class="panel-heading report-heading"><div><h2>Últimas vendas</h2><p>Clique em uma venda para abrir a ficha do comércio.</p></div></div>
@@ -209,7 +303,7 @@
         </section>
       </section>
 
-      <section class="page-view" id="view-models">
+      <section class="page-view view-wide" id="view-models">
         <div class="page-heading crm-heading">
           <div><h1>Modelos de prompt</h1><p>Edite o texto usado para gerar os prompts de cada lead. Os dados do lead entram no lugar dos tokens.</p></div>
         </div>
@@ -221,7 +315,7 @@
               <button class="models-tab" data-model-tab="image" role="tab" aria-selected="false">Atualização de imagens</button>
             </div>
             <div class="models-editor-head">
-              <span class="section-label">TEXTO DO MODELO</span>
+              <div><h2>Texto do modelo</h2><p>Tokens são preenchidos com os dados do lead.</p></div>
               <span id="modelsSaveState" class="models-save-state">Salvo</span>
             </div>
             <label class="sr-only" for="modelsEditor">Texto do modelo</label>
@@ -229,7 +323,7 @@
             <p id="modelsTokenWarning" class="models-token-warning hidden" role="status"></p>
             <div class="models-tokens">
               <div class="section-label">TOKENS DISPONÍVEIS</div>
-              <p class="models-help">Clique para inserir na posição do cursor. O token é substituído pelos dados do lead na hora de gerar.</p>
+              <p class="models-help">Clique para inserir na posição do cursor.</p>
               <div id="modelsTokenList" class="token-list"></div>
             </div>
             <div class="models-actions">
@@ -241,7 +335,7 @@
           </section>
           <aside class="panel models-preview-panel">
             <div class="models-preview-head">
-              <div><h2>Prévia</h2><p>Veja como o prompt sai com os dados de um lead.</p></div>
+              <div><h2>Prévia</h2><p>Com os dados do lead selecionado.</p></div>
               <label class="toolbar-select">Lead<select id="modelsPreviewLead"><option value="">Lead de exemplo</option></select></label>
             </div>
             <label class="sr-only" for="modelsPreviewText">Prévia do prompt</label>
@@ -253,17 +347,16 @@
         </div>
       </section>
 
-      <section class="page-view" id="view-review">
+      <section class="page-view view-narrow" id="view-review">
         <div class="page-heading crm-heading">
-          <div><h1>Gerador de link de avaliação</h1><p>Cole o link do comércio no Google Maps e crie o link que abre direto a avaliação.</p></div>
+          <div><h1>Gerador de link de avaliação</h1><p>Cole o link do comércio no Google Maps e gere um link que abre direto na avaliação.</p></div>
         </div>
         <div class="review-layout">
           <section class="panel review-panel">
-            <div class="panel-heading"><div><span class="step-badge">1</span><div><h2>Link do comércio</h2><p>Use a URL completa do Maps, um link curto, um Place ID ou um link de avaliação.</p></div></div></div>
-            <label class="review-input-label">Link ou identificador do Google
+            <div class="panel-heading"><div><span class="step-badge">1</span><div><h2>Link do comércio</h2><p>Use a URL completa do Maps, um link curto ou o Place ID.</p></div></div></div>
+            <label class="review-input-label">Link ou Place ID
               <input id="reviewInput" placeholder="https://www.google.com/maps/place/... ou ChIJ..." autocomplete="off" spellcheck="false">
             </label>
-            <p class="review-help">No computador, abra o comércio no Google Maps e copie a URL da barra de endereços. Links curtos também são aceitos.</p>
             <div class="review-actions">
               <button class="button button-primary" type="button" id="reviewGenerate">Gerar link de avaliação</button>
               <button class="button button-secondary" type="button" id="reviewClear">Limpar</button>
@@ -282,15 +375,16 @@
             <p class="review-privacy">Links curtos podem usar um leitor externo para abrir o Maps; apenas a URL pública do comércio é enviada. Nenhum dado do lead é enviado.</p>
           </section>
           <section class="panel review-result-panel">
+            <div class="panel-heading"><div><div><h2>Resultado</h2><p>O link pronto para copiar e o Place ID.</p></div></div></div>
             <div id="reviewEmpty" class="review-empty">
               <div class="empty-illustration"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3z"/></svg></div>
-              <h2>Seu link aparece aqui</h2>
-              <p>Cole o link de um comércio para gerar o endereço que leva direto ao formulário de avaliação do Google.</p>
+              <h3>Seu link aparece aqui</h3>
+              <p>Informe o link de um comércio para gerar o endereço de avaliação.</p>
+              <a class="button button-secondary review-empty-action" href="#reviewInput">Informar link do Maps</a>
             </div>
             <div id="reviewResult" class="hidden">
               <div class="review-result-head">
-                <span class="section-label">LINK PRONTO</span>
-                <span id="reviewResultSource" class="review-result-source"></span>
+                <span class="review-result-source">Fonte: <span id="reviewResultSource"></span></span>
               </div>
               <h3 id="reviewResultName">Comércio identificado</h3>
               <label>Link de avaliação<textarea id="reviewResultLink" rows="3" readonly spellcheck="false"></textarea></label>
@@ -414,7 +508,7 @@
         <label>O que lembrar<input id="reminderTitle" required placeholder="Ex.: Visitar o comércio"></label>
         <div class="form-grid two-col"><label>Data<input id="reminderDate" type="date" required></label><label>Horário<input id="reminderTime" type="time"></label></div>
         <label>Detalhes<textarea id="reminderNotes" rows="3" placeholder="Ex.: levar a placa de demonstração; falar com a gerente."></textarea></label>
-        <p class="calendar-reminder-help" id="calendarReminderHelp">Ao salvar um novo lembrete, o Google Calendar abrirá o evento preenchido. Revise e confirme em Salvar.</p>
+        <p class="calendar-reminder-help" id="calendarReminderHelp">O lembrete fica na agenda do CRM. Para criar um evento no Google Calendar, use o botão Calendar no card.</p>
       </div></div>
       <div class="modal-footer"><button class="button button-danger hidden" type="button" id="deleteReminder">Excluir</button><span class="footer-spacer"></span><button class="button button-secondary" type="button" data-close="reminderDialog">Cancelar</button><button class="button button-primary" type="submit">Salvar lembrete</button></div>
     </form>
@@ -448,6 +542,59 @@
       </div>
       <div class="modal-footer"><button class="text-button" type="button" id="sitePromptEditModel">Editar modelo</button><span class="footer-spacer"></span><button class="button button-secondary" type="button" data-close="sitePromptDialog">Fechar</button><button class="button button-primary" type="button" id="sitePromptCopy">Copiar prompt</button></div>
     </form>
+  </dialog>
+  <dialog id="appearanceDialog" class="appearance-sheet" aria-labelledby="appearanceTitle">
+    <div class="appearance-form">
+      <header class="appearance-head">
+        <div><span class="section-label">PERSONALIZAR</span><h2 id="appearanceTitle">Aparência</h2></div>
+        <button class="icon-button" type="button" data-close="appearanceDialog" aria-label="Fechar aparência"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </header>
+      <div class="appearance-body">
+        <section class="appearance-group">
+          <div class="appearance-group-head"><h3>Tema</h3><p>Escolha o conjunto de cores de fundo, papel e destaque.</p></div>
+          <div class="appearance-presets" id="appearancePresets" role="radiogroup" aria-label="Tema">
+            <button class="appearance-preset is-active" type="button" role="radio" aria-checked="true" data-scheme="floresta" tabindex="0"><span class="preset-swatches" aria-hidden="true"><i style="background:#0c1210"></i><i style="background:#151c18"></i><i style="background:#7fbf97"></i></span><span class="preset-name">Floresta</span></button>
+            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="grafite" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#121110"></i><i style="background:#1a1917"></i><i style="background:#c9bfaf"></i></span><span class="preset-name">Grafite</span></button>
+            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="petroleo" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#0c1214"></i><i style="background:#131b1e"></i><i style="background:#7fb6c2"></i></span><span class="preset-name">Petróleo</span></button>
+            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="vinho" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#130f11"></i><i style="background:#1b1619"></i><i style="background:#ce8b8b"></i></span><span class="preset-name">Vinho</span></button>
+            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="bronze" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#12100c"></i><i style="background:#1a1712"></i><i style="background:#d0a566"></i></span><span class="preset-name">Bronze</span></button>
+            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="oliva" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#10110d"></i><i style="background:#181a14"></i><i style="background:#b3c17c"></i></span><span class="preset-name">Oliva</span></button>
+            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="papel" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#f4f2ec"></i><i style="background:#ffffff"></i><i style="background:#356b4d"></i></span><span class="preset-name">Papel</span></button>
+          </div>
+        </section>
+        <section class="appearance-group">
+          <div class="appearance-group-head"><h3>Destaque</h3><p>O destaque marca ação, seleção e sucesso.</p></div>
+          <div class="appearance-accents" id="appearanceAccents"></div>
+          <div class="appearance-custom">
+            <label class="appearance-color-field"><span>Cor livre</span><input id="appearanceColor" type="color" value="#7fbf97" aria-label="Escolher uma cor de destaque"></label>
+            <div class="appearance-hex-field"><label for="appearanceHex">Código</label><input id="appearanceHex" type="text" inputmode="text" maxlength="7" spellcheck="false" autocomplete="off" placeholder="#7fbf97" aria-label="Código hex do destaque" aria-describedby="appearanceHexError"><p id="appearanceHexError" class="appearance-hex-error" role="alert"></p></div>
+          </div>
+          <button class="text-button" id="appearanceAccentReset" type="button">Usar padrão do tema</button>
+        </section>
+        <section class="appearance-group">
+          <div class="appearance-range-head"><h3>Contraste do texto</h3><output id="appearanceContrastValue" for="appearanceContrast">50</output></div>
+          <input id="appearanceContrast" class="appearance-range" type="range" min="0" max="100" step="5" value="50" aria-label="Contraste do texto" aria-valuetext="50, padrão do tema">
+          <div class="appearance-scale" aria-hidden="true"><span>Suave</span><span>Padrão</span><span>Forte</span></div>
+        </section>
+        <section class="appearance-group">
+          <div class="appearance-range-head"><h3>Cantos</h3><output id="appearanceRadiusValue" for="appearanceRadius">12 px</output></div>
+          <input id="appearanceRadius" class="appearance-range" type="range" min="0" max="20" step="1" value="12" aria-label="Arredondamento dos cantos" aria-valuetext="12 pixels">
+        </section>
+        <section class="appearance-group">
+          <div class="appearance-group-head"><h3>Densidade</h3><p>Escolha quanto espaço cada linha e campo ocupam.</p></div>
+          <div class="appearance-density" id="appearanceDensity" role="group" aria-label="Densidade da interface">
+            <button type="button" data-density="compacta" aria-pressed="false">Compacta</button>
+            <button class="is-active" type="button" data-density="confortavel" aria-pressed="true">Confortável</button>
+            <button type="button" data-density="espacada" aria-pressed="false">Espaçada</button>
+          </div>
+        </section>
+      </div>
+      <footer class="appearance-foot">
+        <button class="button button-secondary" id="appearanceResetAll" type="button">Restaurar padrão</button>
+        <span class="footer-spacer"></span>
+        <button class="button button-primary" id="appearanceClose" type="button">Fechar</button>
+      </footer>
+    </div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>

@@ -5,6 +5,18 @@
   const SIDEBAR_KEY = "praca-crm-sidebar-collapsed-v1";
   const LEAD_SORT_KEY = "praca-crm-lead-sort-v1";
   const THEME_KEY = "praca-crm-theme-v1";
+  const APPEARANCE_KEY = "art-crm-appearance-v1";
+  const APPEARANCE_SCHEMES = ["floresta", "grafite", "petroleo", "vinho", "bronze", "oliva", "papel"];
+  const APPEARANCE_DENSITIES = ["compacta", "confortavel", "espacada"];
+  const APPEARANCE_ACCENTS = {
+    floresta: ["#7fbf97", "#8fc7a5", "#6fb48c", "#5fa57d"],
+    grafite: ["#c9bfaf", "#d6ccbc", "#b9ad9b", "#a99c88"],
+    petroleo: ["#7fb6c2", "#8fc4ce", "#6fa9b7", "#5e99a8"],
+    vinho: ["#ce8b8b", "#dc9c9a", "#be7c7c", "#b87878"],
+    bronze: ["#d0a566", "#ddb472", "#c09554", "#ae8647"],
+    oliva: ["#b3c17c", "#c2cf8c", "#a3b16c", "#94a25e"],
+    papel: ["#356b4d", "#2c5c42", "#4a7d5c", "#26503a"]
+  };
   const SYNC_META_PREFIX = "praca-crm-sync-v1:";
   const USER_STATE_PREFIX = "praca-crm-user-v1:";
   const REVIEW_CACHE_KEY = "praca-crm-review-cache-v1";
@@ -706,8 +718,37 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     return (blocks || []).map(function (block) { return String(block.text || "").trim(); }).filter(Boolean).join("\n\n");
   }
 
+  function appearanceFromStorage() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || "null");
+      if (cached && typeof cached === "object") return cached;
+    } catch (_) {}
+    let legacyTheme = "dark";
+    try { legacyTheme = localStorage.getItem(THEME_KEY) || "dark"; } catch (_) {}
+    return { scheme: legacyTheme === "light" ? "papel" : "floresta", lastDarkScheme: "floresta", accent: "", contrast: 50, radius: 12, density: "confortavel" };
+  }
+  function appearanceNumber(value, min, max, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(number)));
+  }
+  function normalizeAppearance(value) {
+    const fallback = appearanceFromStorage();
+    const source = value && typeof value === "object" ? value : {};
+    const schemeSource = typeof source.scheme === "string" ? source.scheme : fallback.scheme;
+    const scheme = APPEARANCE_SCHEMES.includes(schemeSource) ? schemeSource : "floresta";
+    const darkSource = typeof source.lastDarkScheme === "string" ? source.lastDarkScheme : fallback.lastDarkScheme;
+    const lastDarkScheme = APPEARANCE_SCHEMES.includes(darkSource) && darkSource !== "papel" ? darkSource : (scheme !== "papel" ? scheme : "floresta");
+    const accentSource = typeof source.accent === "string" ? source.accent : fallback.accent;
+    const accent = accentSource === "" || /^#[0-9a-f]{6}$/i.test(accentSource) ? accentSource.toLowerCase() : "";
+    const contrast = appearanceNumber(source.contrast != null ? source.contrast : fallback.contrast, 0, 100, 50);
+    const radius = appearanceNumber(source.radius != null ? source.radius : fallback.radius, 0, 20, 12);
+    const densitySource = typeof source.density === "string" ? source.density : fallback.density;
+    const density = APPEARANCE_DENSITIES.includes(densitySource) ? densitySource : "confortavel";
+    return { scheme: scheme, lastDarkScheme: lastDarkScheme, accent: accent, contrast: contrast, radius: radius, density: density };
+  }
   function newState() {
-    return { promptCategory: "", promptLocation: "", promptText: defaultPrompt, promptBlocks: promptBlocksFromText(defaultPrompt), promptHistory: [], leads: [], reminders: [], sales: [], promptTemplates: defaultPromptTemplates(), _promptUpdatedAt: "", _schemaVersion: SCHEMA_VERSION };
+    return { promptCategory: "", promptLocation: "", promptText: defaultPrompt, promptBlocks: promptBlocksFromText(defaultPrompt), promptHistory: [], leads: [], reminders: [], sales: [], promptTemplates: defaultPromptTemplates(), appearance: normalizeAppearance(), _promptUpdatedAt: "", _schemaVersion: SCHEMA_VERSION };
   }
   function localDateKey(value) {
     const date = value instanceof Date ? value : value ? new Date(value) : new Date();
@@ -921,6 +962,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     data.leads = Array.isArray(data.leads) ? data.leads.map(migrateLead) : [];
     data.sales = Array.isArray(data.sales) ? data.sales : [];
     data.promptTemplates = normalizePromptTemplates(data.promptTemplates);
+    data.appearance = normalizeAppearance(data.appearance);
     if (Array.isArray(data.promptBlocks)) data.promptBlocks = migratePromptBlocks(data.promptBlocks);
     if (version < SCHEMA_VERSION) {
       const known = {};
@@ -969,6 +1011,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
         reminders: Array.isArray(data.reminders) ? data.reminders : [],
         sales: Array.isArray(data.sales) ? data.sales : [],
         promptTemplates: normalizePromptTemplates(data.promptTemplates),
+        appearance: normalizeAppearance(data.appearance),
         _promptUpdatedAt: typeof data._promptUpdatedAt === "string" ? data._promptUpdatedAt : "",
         _schemaVersion: Number(data._schemaVersion) || 1
       };
@@ -1018,26 +1061,205 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   let reviewBusy = false;
   const $ = (selector, root) => (root || document).querySelector(selector);
   const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
-  function setTheme(theme, persist) {
-    const dark = theme === "dark";
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  function hexToRgb(hex) {
+    const clean = String(hex || "").replace("#", "");
+    if (!/^[0-9a-f]{6}$/i.test(clean)) return null;
+    return { r: parseInt(clean.slice(0, 2), 16), g: parseInt(clean.slice(2, 4), 16), b: parseInt(clean.slice(4, 6), 16) };
+  }
+  function rgbToHex(r, g, b) {
+    return "#" + [r, g, b].map(function (value) { return Math.round(Math.min(255, Math.max(0, value))).toString(16).padStart(2, "0"); }).join("");
+  }
+  function mixHex(first, second, weight) {
+    const a = hexToRgb(first);
+    const b = hexToRgb(second);
+    if (!a || !b) return first;
+    const amount = Math.min(1, Math.max(0, weight));
+    return rgbToHex(a.r + (b.r - a.r) * amount, a.g + (b.g - a.g) * amount, a.b + (b.b - a.b) * amount);
+  }
+  function rgbaFromHex(hex, alpha) {
+    const rgb = hexToRgb(hex);
+    return rgb ? "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + alpha + ")" : hex;
+  }
+  function colorLuminance(hex) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return null;
+    const channels = [rgb.r, rgb.g, rgb.b].map(function (value) {
+      const channel = value / 255;
+      return channel <= .03928 ? channel / 12.92 : Math.pow((channel + .055) / 1.055, 2.4);
+    });
+    return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+  }
+  function contrastRatio(first, second) {
+    const a = colorLuminance(first);
+    const b = colorLuminance(second);
+    if (a == null || b == null) return 0;
+    return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+  }
+  function accentTextFor(hex) {
+    if (colorLuminance(hex) == null) return "#0b1710";
+    return contrastRatio("#0b1710", hex) >= contrastRatio("#ffffff", hex) ? "#0b1710" : "#ffffff";
+  }
+  function appearanceHexError(value) {
+    const clean = String(value == null ? "" : value).trim();
+    if (!clean) return "";
+    if (!/^#[0-9a-f]{6}$/i.test(clean)) return "Use um código de 6 dígitos, como #7fbf97.";
+    return contrastRatio(clean, accentTextFor(clean)) >= 4.5 ? "" : "Contraste abaixo de 4,5:1. Escolha outra cor.";
+  }
+  function setAppearanceHexValidity(input, value) {
+    if (!input) return;
+    const message = appearanceHexError(value == null ? input.value : value);
+    const error = $("#appearanceHexError");
+    if (error) error.textContent = message;
+    if (message) input.setAttribute("aria-invalid", "true");
+    else input.removeAttribute("aria-invalid");
+  }
+  function writeAppearanceCache(appearance) {
+    try {
+      localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
+      localStorage.setItem(THEME_KEY, appearance.scheme === "papel" ? "light" : "dark");
+    } catch (_) {}
+  }
+  function updateThemeToggle(appearance) {
     const toggle = $("#themeToggle");
-    const label = toggle && toggle.querySelector(".theme-toggle-label");
-    const action = dark ? "Ativar tema claro" : "Ativar tema escuro";
-    if (label) label.textContent = dark ? "Claro" : "Escuro";
-    if (toggle) {
-      toggle.setAttribute("aria-label", action);
-      toggle.title = action;
+    if (!toggle) return;
+    const light = appearance.scheme === "papel";
+    const label = toggle.querySelector(".theme-toggle-label");
+    const action = light ? "Ativar tema escuro" : "Ativar tema claro";
+    if (label) label.textContent = light ? "Escuro" : "Claro";
+    toggle.setAttribute("aria-label", action);
+    toggle.title = action;
+  }
+  function applyAppearance(value, cache) {
+    const appearance = normalizeAppearance(value);
+    state.appearance = appearance;
+    const root = document.documentElement;
+    const light = appearance.scheme === "papel";
+    root.dataset.scheme = appearance.scheme;
+    root.dataset.theme = light ? "light" : "dark";
+    root.dataset.density = appearance.density;
+    root.style.setProperty("--radius-user", appearance.radius + "px");
+    ["--muted", "--green", "--green-dark", "--green-soft", "--focus", "--accent-text"].forEach(function (token) {
+      root.style.removeProperty(token);
+    });
+    const styles = getComputedStyle(root);
+    const canvas = styles.getPropertyValue("--canvas").trim() || (light ? "#f4f2ec" : "#0c1210");
+    const paper = styles.getPropertyValue("--paper").trim() || (light ? "#ffffff" : "#151c18");
+    const ink = styles.getPropertyValue("--ink").trim() || (light ? "#1e241e" : "#edf3ee");
+    const muted = styles.getPropertyValue("--muted").trim() || (light ? "#676d63" : "#a1aea4");
+    if (appearance.contrast !== 50) {
+      const weight = Math.abs(appearance.contrast - 50) / 50;
+      let adjusted = muted;
+      if (appearance.contrast > 50) {
+        adjusted = mixHex(muted, ink, Math.min(.92, weight * .92));
+      } else {
+        const surface = styles.getPropertyValue("--surface-3").trim() || paper;
+        let amount = Math.min(.28, weight * .28);
+        let candidate = mixHex(muted, canvas, amount);
+        while (amount > 0 && contrastRatio(candidate, surface) < 4.5) {
+          amount = Math.max(0, amount - .02);
+          candidate = mixHex(muted, canvas, amount);
+        }
+        adjusted = candidate;
+      }
+      if (adjusted !== muted) root.style.setProperty("--muted", adjusted);
     }
+    if (appearance.accent) {
+      const accent = appearance.accent;
+      const greenDark = mixHex(accent, "#000000", light ? .15 : .08);
+      const focusBase = light ? greenDark : accent;
+      root.style.setProperty("--green", accent);
+      root.style.setProperty("--green-dark", greenDark);
+      root.style.setProperty("--green-soft", mixHex(light ? "#ffffff" : canvas, accent, light ? .08 : .12));
+      root.style.setProperty("--focus", rgbaFromHex(focusBase, light ? .72 : .62));
+      root.style.setProperty("--accent-text", accentTextFor(accent));
+    }
+    updateThemeToggle(appearance);
     const themeColor = document.querySelector('meta[name="theme-color"]');
-    if (themeColor) themeColor.content = dark ? "#111012" : "#f7f5f1";
-    if (persist) {
-      try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch (_) {}
+    if (themeColor) themeColor.content = canvas;
+    if (cache) writeAppearanceCache(appearance);
+  }
+  let appearanceSaveTimer = null;
+  let appearanceDirty = false;
+  function scheduleAppearanceSave() {
+    appearanceDirty = true;
+    clearTimeout(appearanceSaveTimer);
+    appearanceSaveTimer = setTimeout(commitAppearance, 300);
+  }
+  function commitAppearance() {
+    clearTimeout(appearanceSaveTimer);
+    appearanceSaveTimer = null;
+    if (!appearanceDirty) return;
+    appearanceDirty = false;
+    writeAppearanceCache(state.appearance);
+    saveState();
+  }
+  function updateAppearance(patch, persist) {
+    state.appearance = normalizeAppearance(Object.assign({}, state.appearance, patch));
+    applyAppearance(state.appearance, true);
+    renderAppearance();
+    if (persist) scheduleAppearanceSave();
+  }
+  function chooseAppearanceAccent(hex) {
+    const appearance = normalizeAppearance(state.appearance);
+    const accents = APPEARANCE_ACCENTS[appearance.scheme] || [];
+    const value = String(hex || "").toLowerCase();
+    updateAppearance({ accent: value === accents[0] ? "" : value }, true);
+  }
+  function renderAppearance() {
+    const dialog = $("#appearanceDialog");
+    if (!dialog) return;
+    const appearance = normalizeAppearance(state.appearance);
+    const accents = APPEARANCE_ACCENTS[appearance.scheme] || [];
+    const chosen = appearance.accent || accents[0] || "";
+    $$(".appearance-preset", dialog).forEach(function (button) {
+      const active = button.dataset.scheme === appearance.scheme;
+      button.setAttribute("aria-checked", String(active));
+      button.classList.toggle("is-active", active);
+      button.tabIndex = active ? 0 : -1;
+    });
+    const swatches = $("#appearanceAccents");
+    if (swatches) {
+      swatches.innerHTML = accents.map(function (hex, index) {
+        return '<button type="button" class="appearance-accent" data-accent="' + hex + '" style="--swatch:' + hex + ';--swatch-ink:' + accentTextFor(hex) + '" aria-label="Destaque ' + (index + 1) + ' de ' + accents.length + ', ' + hex + '" aria-pressed="' + String(chosen === hex) + '"></button>';
+      }).join("");
     }
+    const color = $("#appearanceColor");
+    if (color) color.value = chosen;
+    const hex = $("#appearanceHex");
+    if (hex && document.activeElement !== hex) hex.value = chosen;
+    setAppearanceHexValidity(hex);
+    const contrast = $("#appearanceContrast");
+    if (contrast) {
+      contrast.value = String(appearance.contrast);
+      contrast.setAttribute("aria-valuetext", appearance.contrast + (appearance.contrast === 50 ? ", padrão do tema" : appearance.contrast > 50 ? ", mais forte" : ", mais suave"));
+    }
+    const contrastValue = $("#appearanceContrastValue");
+    if (contrastValue) contrastValue.textContent = String(appearance.contrast);
+    const radius = $("#appearanceRadius");
+    if (radius) {
+      radius.value = String(appearance.radius);
+      radius.setAttribute("aria-valuetext", appearance.radius + (appearance.radius === 1 ? " pixel" : " pixels"));
+    }
+    const radiusValue = $("#appearanceRadiusValue");
+    if (radiusValue) radiusValue.textContent = appearance.radius + " px";
+    $$(".appearance-density button", dialog).forEach(function (button) {
+      const active = button.dataset.density === appearance.density;
+      button.setAttribute("aria-pressed", String(active));
+      button.classList.toggle("is-active", active);
+    });
+  }
+  function setTheme(theme, persist) {
+    const current = normalizeAppearance(state.appearance);
+    const target = theme === "light" ? "papel" : (current.scheme === "papel" ? current.lastDarkScheme : current.scheme);
+    state.appearance = normalizeAppearance(Object.assign({}, current, { scheme: target, lastDarkScheme: target === "papel" ? current.lastDarkScheme : target }));
+    applyAppearance(state.appearance, true);
+    renderAppearance();
+    if (persist) scheduleAppearanceSave();
   }
   const leadDialog = $("#leadDialog");
   const reminderDialog = $("#reminderDialog");
   const sitePromptDialog = $("#sitePromptDialog");
+  const appearanceDialog = $("#appearanceDialog");
   const authForm = $("#authForm");
   const singleFieldMap = {
     leadName: ["name", "Nome"], leadPhone: ["phone", "Telefone"], leadCategory: ["category", "Categoria"],
@@ -1173,6 +1395,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       promptBlocks: promptSource.promptBlocks,
       promptHistory: Array.from(history.values()).sort(function (a,b) { return (Date.parse(b.usedAt || "") || 0) - (Date.parse(a.usedAt || "") || 0); }).slice(0, 10),
       promptTemplates: mergePromptTemplates(localState.promptTemplates, remoteState.promptTemplates),
+      appearance: localState.appearance || normalizeAppearance(),
       _promptUpdatedAt: promptSource._promptUpdatedAt,
       leads: mergeRecords(localState.leads, remoteState.leads),
       reminders: mergeRecords(localState.reminders, remoteState.reminders),
@@ -1188,6 +1411,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const userId = currentUser.id;
     const version = syncVersion;
     const snapshot = JSON.parse(JSON.stringify(state));
+    delete snapshot.appearance;
     const timestamp = new Date().toISOString();
     try {
       const result = await supabase.from("crm_state").upsert({ user_id: userId, state: snapshot, updated_at: timestamp }, { onConflict: "user_id" }).select("updated_at").single();
@@ -1411,6 +1635,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     syncDirty = false;
     activeStorageKey = STORAGE_KEY;
     state = loadState(STORAGE_KEY);
+    applyAppearance(state.appearance, true);
     lastStateSnapshot = JSON.parse(JSON.stringify(state));
     $("#accountEmail").textContent = "Somente neste navegador";
     document.body.classList.add("authenticated");
@@ -1758,8 +1983,8 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       const data = await bridgeRequest("/search", { prompt: prompt, category: category, location: location }, 20 * 60 * 1000);
       if (!data || !data.text) throw new Error("A pesquisa voltou vazia.");
       rememberPrompt(prompt);
-      $("#importText").value = data.text;
-      $("#importPanel").classList.remove("hidden");
+      const importField = $("#importText");
+      if (importField) importField.value = data.text;
       setView("crm");
       importTable();
       const seconds = data.elapsedSec || Math.round((Date.now() - startedAt) / 1000);
@@ -2259,7 +2484,14 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (view === "reports") renderReports();
     if (view === "review") renderReviewTool();
     if (view === "models") renderModels();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const section = document.getElementById("view-" + view);
+    const heading = section ? section.querySelector("h1") : null;
+    if (heading) {
+      heading.setAttribute("tabindex", "-1");
+      heading.focus({ preventScroll: true });
+    }
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   }
   function setSidebarCollapsed(collapsed) {
     document.body.classList.toggle("sidebar-collapsed", collapsed);
@@ -2321,18 +2553,21 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     }));
     $("#leadList").innerHTML = visible.map(function (lead) {
       const gap = gapFor(lead);
-      const gapText = gap === null ? "Gap não informado" : (gap > 0 ? "+" : "") + gap + " avaliações";
+      const gapText = gap === null ? "" : (gap > 0 ? "+" : "") + gap + " avaliações";
       const subtitle = [lead.category, lead.location].filter(Boolean).join(" · ") || "Sem categoria ou região";
       const phone = lead.phone ? "WhatsApp " + lead.phone : "Sem telefone";
       const status = STATUSES.includes(lead.status) ? lead.status : "Novo";
-      const googleLink = googleProfileHref(lead.googleUrl);
       return '<article class="lead-row" data-lead-id="' + escapeHtml(lead.id) + '" tabindex="0" role="button">' +
         '<div><div class="lead-name">' + escapeHtml(lead.name || "Comércio sem nome") + '</div><div class="lead-sub">' + escapeHtml(subtitle) + " · " + escapeHtml(phone) + '</div></div>' +
-        '<div class="lead-gap">' + escapeHtml(gapText) + '<small>' + escapeHtml(lead.competitor ? "vs. " + lead.competitor : "sem concorrente") + '</small></div>' +
-        '<div class="lead-source">' + escapeHtml(lead.source || "Origem não informada") + (googleLink ? '<a class="google-quick-link" href="' + escapeHtml(googleLink) + '" target="_blank" rel="noopener noreferrer">Google ↗</a>' : '') + '</div>' +
+        '<div class="lead-gap' + (gap === null ? " is-empty" : "") + '">' + escapeHtml(gapText) + (gap === null ? "" : '<small>' + escapeHtml(lead.competitor ? "vs. " + lead.competitor : "sem concorrente") + '</small>') + '</div>' +
+        '<div class="lead-source">' + escapeHtml(lead.source || "Origem não informada") + '</div>' +
         '<span class="status-chip" data-status="' + escapeHtml(status) + '">' + escapeHtml(status) + '</span><span class="lead-arrow" aria-hidden="true">' + ICON_CHEVRON + '</span></article>';
     }).join("");
-    $$(".filter-tab").forEach(function (button) { button.classList.toggle("active", button.dataset.status === activeStatus); });
+    $$(".filter-tab").forEach(function (button) {
+      const pressed = button.dataset.status === activeStatus;
+      button.classList.toggle("active", pressed);
+      button.setAttribute("aria-pressed", String(pressed));
+    });
     $("#filterCountTodos").textContent = String(state.leads.length);
     const resultCount = $("#leadResultCount");
     if (resultCount) {
@@ -2342,12 +2577,18 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     $("#noResults").classList.toggle("hidden", state.leads.length === 0 || visible.length > 0);
     $("#leadList").classList.toggle("hidden", state.leads.length === 0 || visible.length === 0);
     $("#leadCountBadge").textContent = String(state.leads.length);
-    $("#statTotal").textContent = String(state.leads.length);
+    const totalLeads = state.leads.length;
+    const wonLeads = state.leads.filter(function (lead) { return lead.status === SOLD_STATUS; }).length;
+    $("#statTotal").textContent = String(totalLeads);
+    const totalLabel = $("#statTotalLabel");
+    if (totalLabel) totalLabel.textContent = totalLeads === 1 ? "lead" : "leads";
     $("#statActive").textContent = String(state.leads.filter(function (lead) { return ["Mandei", "Respondeu", "Proposta"].includes(lead.status); }).length);
-    $("#statWon").textContent = String(state.leads.filter(function (lead) { return lead.status === SOLD_STATUS; }).length);
+    $("#statWon").textContent = String(wonLeads);
+    const wonLabel = $("#statWonLabel");
+    if (wonLabel) wonLabel.textContent = wonLeads === 1 ? "vendido" : "vendidos";
     const soldValue = state.sales.reduce(function (total, sale) { return typeof sale.valueCents === "number" && sale.valueCents > 0 ? total + sale.valueCents : total; }, 0);
     const wonHint = $("#statWonHint");
-    if (wonHint) wonHint.textContent = soldValue > 0 ? formatCurrency(soldValue) + " vendidos" : "sem valor informado";
+    if (wonHint) wonHint.textContent = soldValue > 0 ? formatCurrency(soldValue) : "(sem valor)";
     const pending = state.reminders.filter(function (item) { return !item.done; }).length;
     $("#statReminders").textContent = String(pending);
     $("#reminderCountBadge").textContent = String(pending);
@@ -3283,8 +3524,18 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     $("#deleteReminder").classList.toggle("hidden", !reminder);
     $("#calendarReminderHelp").textContent = reminder
       ? "Ao editar, o lembrete do CRM é atualizado. Para criar um evento no Google Calendar com esses dados, use o botão Calendar na agenda."
-      : "Ao salvar um novo lembrete, o Google Calendar abrirá o evento preenchido. Revise e confirme em Salvar.";
+      : "O lembrete fica na agenda do CRM. Para criar um evento no Google Calendar, use o botão Calendar no card.";
     reminderDialog.showModal();
+  }
+  function reminderDateInfo(value) {
+    const parts = String(value || "").split("-").map(Number);
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null;
+    return {
+      chip: date.getDate() + " " + new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(date).replace(".", ""),
+      weekday: new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(date).replace(".", "")
+    };
   }
   function renderAgenda() {
     const today = localDateValue();
@@ -3292,16 +3543,18 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (agendaFilter === "upcoming") items = items.filter(function (item) { return !item.done; });
     if (agendaFilter === "done") items = items.filter(function (item) { return item.done; });
     items.sort(function (a, b) {
+      if (a.done !== b.done) return a.done ? 1 : -1;
       return (a.date + " " + (a.time || "23:59")).localeCompare(b.date + " " + (b.time || "23:59"));
     });
     $("#reminderList").innerHTML = items.map(function (item) {
       const lead = state.leads.find(function (entry) { return entry.id === item.leadId; });
-      const overdue = !item.done && item.date < today;
-      const weekday = formatDate(item.date, { weekday: "short" }).replace(".", "");
+      const overdue = !item.done && !!item.date && item.date < today;
+      const dateInfo = reminderDateInfo(item.date);
+      const meta = [dateInfo ? dateInfo.weekday : "", item.time, lead ? lead.name : "Sem lead"].filter(Boolean).join(" · ");
       return '<article class="reminder-card ' + (item.done ? "is-done" : "") + (overdue ? " is-overdue" : "") + '" data-reminder-id="' + escapeHtml(item.id) + '">' +
-        '<div class="reminder-date"><strong>' + escapeHtml(item.date ? item.date.slice(8, 10) : "—") + '</strong><small>' + escapeHtml(weekday || "data") + '</small></div>' +
+        '<div class="reminder-date"><strong>' + escapeHtml(dateInfo ? dateInfo.chip : "sem data") + '</strong></div>' +
         '<div><div class="reminder-title">' + escapeHtml(item.title) + (overdue ? ' <span class="overdue-label">Atrasado</span>' : "") + '</div>' +
-        '<div class="reminder-meta">' + escapeHtml(formatDate(item.date)) + (item.time ? " · " + escapeHtml(item.time) : "") + (lead ? " · " + escapeHtml(lead.name) : " · Sem lead") + '</div>' +
+        '<div class="reminder-meta">' + escapeHtml(meta) + '</div>' +
         (item.notes ? '<div class="reminder-notes">' + escapeHtml(item.notes) + '</div>' : "") + '</div>' +
         '<div class="reminder-actions"><button class="small-action complete" data-action="toggle">' + (item.done ? "Reabrir" : "Concluir") + '</button><button class="small-action" data-action="edit">Editar</button><button class="small-action calendar-action" data-action="calendar" title="Abrir um evento preenchido no Google Calendar">Calendar ↗</button></div></article>';
     }).join("");
@@ -3309,10 +3562,18 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (!items.length) {
       $("#emptyAgenda h2").textContent = state.reminders.length ? "Nenhum lembrete neste filtro" : "Nenhum lembrete por enquanto";
       $("#emptyAgenda p").textContent = state.reminders.length ? "Troque o filtro para ver outros lembretes ou crie um novo." : "Crie um lembrete para uma visita, retorno ou detalhe importante de uma venda.";
-      $("#emptyReminder").classList.toggle("hidden", state.reminders.length > 0);
     }
     $("#reminderList").classList.toggle("hidden", items.length === 0);
-    $$(".agenda-filter").forEach(function (button) { button.classList.toggle("active", button.dataset.agenda === agendaFilter); });
+    const upcomingCount = state.reminders.filter(function (item) { return !item.done; }).length;
+    const doneCount = state.reminders.filter(function (item) { return item.done; }).length;
+    $("#agendaCountUpcoming").textContent = String(upcomingCount);
+    $("#agendaCountAll").textContent = String(state.reminders.length);
+    $("#agendaCountDone").textContent = String(doneCount);
+    $$(".agenda-filter").forEach(function (button) {
+      const pressed = button.dataset.agenda === agendaFilter;
+      button.classList.toggle("active", pressed);
+      button.setAttribute("aria-pressed", String(pressed));
+    });
     $("#reminderList").querySelectorAll(".reminder-card").forEach(function (card) {
       card.querySelector('[data-action="edit"]').addEventListener("click", function () { openReminder(card.dataset.reminderId); });
       card.querySelector('[data-action="calendar"]').addEventListener("click", function () {
@@ -3333,7 +3594,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     $("#reminderCountBadge").textContent = String(pending);
     $("#statReminders").textContent = String(pending);
   }
-  let reportPeriod = "all";
+  let reportPeriod = "7";
   function parseLocalDateKey(key) {
     const parts = String(key || "").split("-").map(Number);
     return parts.length === 3 && parts[0] ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
@@ -3432,8 +3693,12 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const container = $("#reportChart");
     if (!container) return;
     if (!rows.length) { container.innerHTML = '<div class="empty-small">Sem dados no período.</div>'; return; }
-    const max = rows.reduce(function (m, row) { return Math.max(m, row.sent, row.sold); }, 0) || 1;
-    const bars = rows.map(function (row) {
+    const chartRows = rows.slice(-30);
+    const hasMovement = chartRows.some(function (row) { return row.sent > 0 || row.sold > 0; });
+    if (!hasMovement) { container.innerHTML = '<div class="empty-small">Sem movimento no período.</div>'; return; }
+    const truncated = rows.length > chartRows.length;
+    const max = chartRows.reduce(function (m, row) { return Math.max(m, row.sent, row.sold); }, 0) || 1;
+    const bars = chartRows.map(function (row) {
       const sentHeight = Math.max(Math.round((row.sent / max) * 100), row.sent ? 5 : 0);
       const soldHeight = Math.max(Math.round((row.sold / max) * 100), row.sold ? 5 : 0);
       const parts = row.key.split("-");
@@ -3447,7 +3712,12 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
         '<small class="chart-label">' + escapeHtml(label) + '</small>' +
       '</div>';
     }).join("");
-    const soldRows = rows.filter(function (row) { return row.sold > 0; });
+    const sentTotal = chartRows.reduce(function (sum, row) { return sum + row.sent; }, 0);
+    const soldTotal = chartRows.reduce(function (sum, row) { return sum + row.sold; }, 0);
+    const valueTotal = chartRows.reduce(function (sum, row) { return sum + row.soldValue; }, 0);
+    const windowText = truncated ? "Últimos 30 dias" : formatDate(chartRows[0].key) + " a " + formatDate(chartRows[chartRows.length - 1].key);
+    const summary = windowText + ": " + sentTotal + " mensagens, " + soldTotal + " vendas, " + formatCurrency(valueTotal);
+    const soldRows = chartRows.filter(function (row) { return row.sold > 0; });
     let footer = "";
     if (soldRows.length) {
       footer = '<div class="chart-sales">' + soldRows.map(function (row) {
@@ -3455,22 +3725,22 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
         return '<span class="chart-sale-chip"><b>' + escapeHtml(parts[2] + "/" + parts[1]) + '</b> ' + escapeHtml(formatCurrency(row.soldValue)) + '</span>';
       }).join("") + '</div>';
     }
-    container.innerHTML = '<div class="chart-scroll"><div class="chart-track">' + bars + '</div></div>' + footer;
+    const note = truncated ? '<p class="chart-note">Últimos 30 dias do período.</p>' : "";
+    container.innerHTML = note + '<div class="chart-scroll" tabindex="0" role="region" aria-label="Gráfico de movimento por dia. Use as setas para rolar."><div class="chart-track" role="img" aria-label="' + escapeHtml(summary) + '">' + bars + '</div></div>' + footer;
   }
   function renderReportTable(rows) {
     const table = $("#reportTable");
     if (!table) return;
     if (!rows.length) { table.innerHTML = ""; return; }
-    const head = '<thead><tr><th>Dia</th><th>Novos</th><th>Mensagens</th><th>Respostas</th><th>Recusas</th><th>Sem resposta</th><th>Aguardando</th><th>Em aberto</th><th>Vendas</th><th>Valor</th><th>Conversão</th></tr></thead>';
+    const head = '<thead><tr><th>Dia</th><th>Mensagens</th><th>Respostas</th><th>Recusas</th><th>Sem resposta</th><th>Aguardando</th><th>Vendas</th><th>Valor</th></tr></thead>';
     const body = rows.map(function (row) {
       const waiting = Math.max(row.sent - row.responded - row.refused - row.noReply, 0);
       return '<tr><td>' + escapeHtml(formatDate(row.key, { weekday: "short", day: "2-digit", month: "2-digit" })) + '</td>' +
-        '<td>' + row.leadsNew + '</td><td>' + row.sent + '</td><td>' + row.responded + '</td><td>' + row.refused + '</td><td>' + row.noReply + '</td>' +
-        '<td>' + waiting + '</td><td>' + row.open + '</td><td>' + row.sold + '</td>' +
-        '<td>' + (row.soldValue ? escapeHtml(formatCurrency(row.soldValue)) : "—") + '</td>' +
-        '<td>' + escapeHtml(conversionText(row.sold, row.sent)) + '</td></tr>';
+        '<td>' + row.sent + '</td><td>' + row.responded + '</td><td>' + row.refused + '</td><td>' + row.noReply + '</td>' +
+        '<td>' + waiting + '</td><td>' + row.sold + '</td>' +
+        '<td>' + (row.soldValue ? escapeHtml(formatCurrency(row.soldValue)) : "—") + '</td></tr>';
     }).join("");
-    table.innerHTML = head + '<tbody>' + body + '</tbody>';
+    table.innerHTML = '<caption class="sr-only">Resumo diário</caption>' + head + '<tbody>' + body + '</tbody>';
   }
   function renderRecentSales() {
     const container = $("#recentSales");
@@ -3496,45 +3766,32 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const range = reportRange();
     const rows = buildDailyReport(range);
     const totals = rows.reduce(function (acc, row) {
-      acc.leadsNew += row.leadsNew; acc.sent += row.sent; acc.responded += row.responded;
-      acc.refused += row.refused; acc.noReply += row.noReply; acc.sold += row.sold; acc.soldValue += row.soldValue;
+      acc.sent += row.sent; acc.responded += row.responded; acc.refused += row.refused;
+      acc.noReply += row.noReply; acc.sold += row.sold; acc.soldValue += row.soldValue;
       return acc;
-    }, { leadsNew: 0, sent: 0, responded: 0, refused: 0, noReply: 0, sold: 0, soldValue: 0 });
-    const contacted = {};
-    const startKey = rows.length ? rows[0].key : localDateKey(range.start);
-    const endKey = rows.length ? rows[rows.length - 1].key : localDateKey(range.end);
-    state.leads.forEach(function (lead) {
-      (lead.statusHistory || []).forEach(function (entry) {
-        const key = dateKeyFromISO(entry && entry.at);
-        if (key && key >= startKey && key <= endKey && CONTACTED_STATUSES.indexOf(entry.to) >= 0) contacted[lead.id] = true;
-      });
-    });
-    const contactedCount = Object.keys(contacted).length;
+    }, { sent: 0, responded: 0, refused: 0, noReply: 0, sold: 0, soldValue: 0 });
     const openNow = state.leads.filter(function (lead) { return OPEN_STATUSES.indexOf(lead.status) >= 0; }).length;
     const waiting = Math.max(totals.sent - totals.responded - totals.refused - totals.noReply, 0);
-    const ticket = totals.sold ? Math.round(totals.soldValue / totals.sold) : null;
+    const openLine = $("#reportOpenNow");
+    if (openLine) openLine.textContent = "Em aberto agora: " + openNow;
     cards.innerHTML = [
-      reportCard("Mensagens enviadas", String(totals.sent), "leads contatados no período"),
-      reportCard("Respostas", String(totals.responded), "dos contatados no período"),
-      reportCard("Recusas", String(totals.refused), "dos contatados no período"),
-      reportCard("Sem resposta", String(totals.noReply), "dos contatados no período"),
-      reportCard("Aguardando resposta", String(waiting), "contatados sem desfecho ainda"),
-      reportCard("Em aberto", String(openNow), "no pipeline, agora"),
-      reportCard("Novos leads", String(totals.leadsNew), "cadastrados no período"),
-      reportCard("Vendas", String(totals.sold), "no período"),
-      reportCard("Valor vendido", formatCurrency(totals.soldValue), "total no período"),
-      reportCard("Ticket médio", ticket === null ? "—" : formatCurrency(ticket), "por venda"),
-      reportCard("Conversão do período", conversionText(totals.sold, contactedCount), "vendas ÷ contatados", "highlight"),
+      reportCard("Mensagens", String(totals.sent), "enviadas"),
+      reportCard("Respostas", String(totals.responded), "recebidas"),
+      reportCard("Aguardando", String(waiting), "sem retorno ainda"),
+      reportCard("Vendas", String(totals.sold), "fechadas"),
+      reportCard("Valor vendido", formatCurrency(totals.soldValue), "soma do período"),
       reportCard("Conversão por envio", conversionText(totals.sold, totals.sent), "vendas ÷ mensagens", "highlight")
     ].join("");
     renderReportChart(rows);
     renderReportTable(rows);
     renderRecentSales();
     $$(".report-period-button").forEach(function (button) {
-      button.classList.toggle("active", button.dataset.period === reportPeriod);
+      const pressed = button.dataset.period === reportPeriod;
+      button.classList.toggle("active", pressed);
+      button.setAttribute("aria-pressed", String(pressed));
     });
   }
-  function renderAll() { renderPrompt(); renderLeads(); renderAgenda(); renderReports(); renderReviewTool(); renderModels(); }
+  function renderAll() { applyAppearance(state.appearance, true); renderAppearance(); renderPrompt(); renderLeads(); renderAgenda(); renderReports(); renderReviewTool(); renderModels(); }
 
   $$(".nav-item").forEach(function (button) {
     button.addEventListener("click", function () { setView(button.dataset.view); });
@@ -3548,6 +3805,14 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   });
 
   $("#reviewGenerate").addEventListener("click", function () { startReviewGeneration($("#reviewInput").value); });
+  const reviewEmptyAction = $(".review-empty-action");
+  if (reviewEmptyAction) reviewEmptyAction.addEventListener("click", function (event) {
+    event.preventDefault();
+    const input = $("#reviewInput");
+    if (!input) return;
+    input.focus();
+    input.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  });
   $("#reviewInput").addEventListener("keydown", function (event) {
     if (event.key !== "Enter") return;
     event.preventDefault();
@@ -3623,10 +3888,13 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     showToast("Modelo original restaurado.");
   });
 
-  $("#toggleImport").addEventListener("click", function () {
-    $("#importPanel").classList.toggle("hidden");
-    if (!$("#importPanel").classList.contains("hidden")) $("#importText").focus();
-  });
+  function goToPromptImport() {
+    setView("prompt");
+    const field = $("#promptImportText");
+    if (field) field.focus();
+  }
+  const toggleImportButton = $("#toggleImport");
+  if (toggleImportButton) toggleImportButton.addEventListener("click", goToPromptImport);
   $("#analyzeDuplicates").addEventListener("click", showExistingDuplicateAnalysis);
   $("#closeExistingDuplicatePanel").addEventListener("click", function () { $("#existingDuplicatePanel").classList.add("hidden"); });
   $("#existingDuplicateList").addEventListener("click", function (event) {
@@ -3663,9 +3931,31 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       }
     }
   });
-  $("#emptyImport").addEventListener("click", function () { $("#importPanel").classList.remove("hidden"); $("#importText").focus(); });
-  $("#closeImport").addEventListener("click", function () { $("#importPanel").classList.add("hidden"); });
+  const emptyImportButton = $("#emptyImport");
+  if (emptyImportButton) emptyImportButton.addEventListener("click", goToPromptImport);
+  const closeImportButton = $("#closeImport");
+  if (closeImportButton) closeImportButton.addEventListener("click", function () {
+    const panel = $("#importPanel");
+    if (panel) panel.classList.add("hidden");
+  });
   $("#importLeads").addEventListener("click", importTable);
+  $("#promptImportLeads").addEventListener("click", function () {
+    const text = $("#promptImportText").value;
+    const status = $("#promptImportStatus");
+    if (!text.trim()) {
+      status.textContent = "Cole uma tabela para analisar.";
+      status.classList.add("error-text");
+      return;
+    }
+    const target = $("#importText");
+    if (!target) return;
+    target.value = text;
+    setView("crm");
+    importTable();
+    $("#promptImportText").value = "";
+    status.textContent = "";
+    status.classList.remove("error-text");
+  });
   $("#cancelImportReview").addEventListener("click", cancelImportReview);
   $("#applyImport").addEventListener("click", applyImportReview);
   $("#duplicateReview").addEventListener("click", function (event) {
@@ -3953,7 +4243,6 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   });
 
   $("#newReminder").addEventListener("click", function () { openReminder(""); });
-  $("#emptyReminder").addEventListener("click", function () { openReminder(""); });
   $("#addReminderForLead").addEventListener("click", function () {
     const leadId = $("#leadId").value;
     leadDialog.close();
@@ -3974,11 +4263,10 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (old) state.reminders = state.reminders.map(function (item) { return item.id === id ? reminder : item; });
     else state.reminders.push(reminder);
     saveState();
-    if (!old) openGoogleCalendarReminder(reminder);
     reminderDialog.close();
     renderAgenda();
     renderLeads();
-    showToast(old ? "Lembrete atualizado." : "Lembrete salvo. Confirme a inclusão no Google Calendar.");
+    showToast(old ? "Lembrete atualizado." : "Lembrete salvo.");
   });
   $("#deleteReminder").addEventListener("click", function () {
     const id = $("#reminderId").value;
@@ -3998,9 +4286,65 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       dialog.close();
     });
   });
-  [leadDialog, reminderDialog, sitePromptDialog].forEach(function (dialog) {
+  [leadDialog, reminderDialog, sitePromptDialog, appearanceDialog].forEach(function (dialog) {
+    if (!dialog) return;
     dialog.addEventListener("click", function (event) { if (event.target === dialog) dialog.close(); });
   });
+  $("#appearanceToggle").addEventListener("click", function () {
+    [leadDialog, reminderDialog, sitePromptDialog].forEach(function (dialog) { if (dialog && dialog.open) dialog.close(); });
+    renderAppearance();
+    if (!appearanceDialog.open) appearanceDialog.showModal();
+    const body = $(".appearance-body", appearanceDialog);
+    if (body) body.scrollTop = 0;
+  });
+  $("#appearanceClose").addEventListener("click", function () { appearanceDialog.close(); });
+  appearanceDialog.addEventListener("close", commitAppearance);
+  $("#appearancePresets").addEventListener("click", function (event) {
+    const button = event.target.closest(".appearance-preset");
+    if (!button) return;
+    const scheme = button.dataset.scheme;
+    updateAppearance({ scheme: scheme, lastDarkScheme: scheme === "papel" ? normalizeAppearance(state.appearance).lastDarkScheme : scheme, accent: "" }, true);
+  });
+  $("#appearancePresets").addEventListener("keydown", function (event) {
+    const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    const buttons = $$(".appearance-preset", this);
+    const currentIndex = buttons.indexOf(document.activeElement);
+    if (currentIndex < 0) return;
+    event.preventDefault();
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : event.key === "ArrowRight" || event.key === "ArrowDown" ? (currentIndex + 1) % buttons.length : (currentIndex - 1 + buttons.length) % buttons.length;
+    buttons[nextIndex].focus();
+    buttons[nextIndex].click();
+  });
+  $("#appearanceAccents").addEventListener("click", function (event) {
+    const button = event.target.closest(".appearance-accent");
+    if (!button) return;
+    const value = button.dataset.accent;
+    chooseAppearanceAccent(value);
+    const next = $('#appearanceAccents [data-accent="' + value + '"]');
+    if (next) next.focus();
+  });
+  $("#appearanceColor").addEventListener("input", function () { chooseAppearanceAccent(this.value); });
+  $("#appearanceHex").addEventListener("input", function () {
+    const value = this.value.trim();
+    const valid = /^#[0-9a-f]{6}$/i.test(value);
+    setAppearanceHexValidity(this, value);
+    if (valid) chooseAppearanceAccent(value);
+  });
+  $("#appearanceHex").addEventListener("blur", function () {
+    renderAppearance();
+  });
+  $("#appearanceAccentReset").addEventListener("click", function () { updateAppearance({ accent: "" }, true); });
+  $("#appearanceContrast").addEventListener("input", function () { updateAppearance({ contrast: Number(this.value) }, true); });
+  $("#appearanceRadius").addEventListener("input", function () { updateAppearance({ radius: Number(this.value) }, true); });
+  $("#appearanceDensity").addEventListener("click", function (event) {
+    const button = event.target.closest("button[data-density]");
+    if (button) updateAppearance({ density: button.dataset.density }, true);
+  });
+  $("#appearanceResetAll").addEventListener("click", function () {
+    updateAppearance({ scheme: "floresta", lastDarkScheme: "floresta", accent: "", contrast: 50, radius: 12, density: "confortavel" }, true);
+  });
+  window.addEventListener("pagehide", commitAppearance);
   leadDialog.addEventListener("close", resetLeadDialog);
   sitePromptDialog.addEventListener("close", function () {
     if (sitePromptDirty) saveSitePromptLinks();
@@ -4129,9 +4473,9 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   window.addEventListener("online", function () { if (syncDirty) flushCloudSync(); else refreshCloudState(); });
   window.addEventListener("focus", refreshCloudState);
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") refreshCloudState(); });
-  let savedTheme = "dark";
-  try { savedTheme = localStorage.getItem(THEME_KEY) || "dark"; } catch (_) {}
-  setTheme(savedTheme, false);
+  state.appearance = normalizeAppearance(state.appearance);
+  applyAppearance(state.appearance, true);
+  updateThemeToggle(state.appearance);
   initializeAuth();
   renderAll();
   renderBridge();
