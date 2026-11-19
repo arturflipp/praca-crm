@@ -17,6 +17,49 @@
     oliva: ["#b3c17c", "#c2cf8c", "#a3b16c", "#94a25e"],
     papel: ["#356b4d", "#2c5c42", "#4a7d5c", "#26503a"]
   };
+  const APPEARANCE_SCHEME_PREVIEW = {
+    floresta: ["#0c1210", "#151c18", "#7fbf97"],
+    grafite: ["#121110", "#1a1917", "#c9bfaf"],
+    petroleo: ["#0c1214", "#131b1e", "#7fb6c2"],
+    vinho: ["#130f11", "#1b1619", "#ce8b8b"],
+    bronze: ["#12100c", "#1a1712", "#d0a566"],
+    oliva: ["#10110d", "#181a14", "#b3c17c"],
+    papel: ["#f4f2ec", "#ffffff", "#356b4d"]
+  };
+  const APPEARANCE_COLOR_TOKENS = {
+    canvas: { label: "Fundo da página", group: "surface" },
+    paper: { label: "Cartões e painéis", group: "surface" },
+    "sidebar-bg": { label: "Barra lateral", group: "surface" },
+    "topbar-bg": { label: "Barra do topo", group: "surface" },
+    "surface-2": { label: "Superfície elevada", group: "surface" },
+    "surface-3": { label: "Superfície de destaque", group: "surface" },
+    "control-bg": { label: "Fundo de campos", group: "surface" },
+    "hover-bg": { label: "Fundo ao passar o mouse", group: "surface" },
+    ink: { label: "Texto principal", group: "text" },
+    muted: { label: "Texto secundário", group: "text" },
+    "control-ink": { label: "Texto em campos", group: "text" },
+    "nav-ink": { label: "Texto da navegação", group: "text" },
+    line: { label: "Linhas e divisórias", group: "border" },
+    "control-border": { label: "Borda de campos", group: "border" },
+    "row-line": { label: "Linha das listas", group: "border" },
+    green: { label: "Destaque", group: "accent" },
+    "green-dark": { label: "Destaque escuro", group: "accent" },
+    "green-soft": { label: "Destaque suave", group: "accent" },
+    focus: { label: "Anel de foco", group: "accent" },
+    orange: { label: "Aviso", group: "warning" },
+    "orange-soft": { label: "Aviso suave", group: "warning" },
+    red: { label: "Perigo", group: "warning" }
+  };
+  const APPEARANCE_COLOR_ORDER = Object.keys(APPEARANCE_COLOR_TOKENS);
+  const APPEARANCE_COLOR_GROUPS = [
+    { id: "surface", title: "Fundo e superfícies" },
+    { id: "text", title: "Texto" },
+    { id: "border", title: "Bordas" },
+    { id: "accent", title: "Destaque" },
+    { id: "warning", title: "Avisos" }
+  ];
+  const APPEARANCE_PRIMARY_TOKENS = ["canvas", "paper", "ink", "muted", "line", "red"];
+  const APPEARANCE_ACCENT_TOKENS = ["green", "green-dark", "green-soft", "focus"];
   const SYNC_META_PREFIX = "praca-crm-sync-v1:";
   const USER_STATE_PREFIX = "praca-crm-user-v1:";
   const REVIEW_CACHE_KEY = "praca-crm-review-cache-v1";
@@ -732,6 +775,33 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (!Number.isFinite(number)) return fallback;
     return Math.min(max, Math.max(min, Math.round(number)));
   }
+  function appearanceHex(value) {
+    return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "";
+  }
+  function normalizeAppearanceColors(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const colors = {};
+    APPEARANCE_COLOR_ORDER.forEach(function (token) {
+      const clean = appearanceHex(source[token]);
+      if (clean) colors[token] = clean;
+    });
+    return colors;
+  }
+  function appearanceThemeId(name, index) {
+    return "theme-" + normalize(name).slice(0, 24) + "-" + index;
+  }
+  function normalizeCustomThemes(value) {
+    return (Array.isArray(value) ? value : []).map(function (item, index) {
+      if (!item || typeof item !== "object") return null;
+      const name = String(item.name == null ? "" : item.name).trim().slice(0, 40);
+      if (!name) return null;
+      const schemeSource = typeof item.scheme === "string" ? item.scheme : "floresta";
+      const scheme = APPEARANCE_SCHEMES.includes(schemeSource) ? schemeSource : "floresta";
+      const accent = appearanceHex(item.accent);
+      const id = typeof item.id === "string" && item.id ? item.id : appearanceThemeId(name, index);
+      return { id: id, name: name, scheme: scheme, accent: accent, colors: normalizeAppearanceColors(item.colors) };
+    }).filter(Boolean).slice(0, 24);
+  }
   function normalizeAppearance(value) {
     const fallback = appearanceFromStorage();
     const source = value && typeof value === "object" ? value : {};
@@ -745,7 +815,11 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const radius = appearanceNumber(source.radius != null ? source.radius : fallback.radius, 0, 20, 12);
     const densitySource = typeof source.density === "string" ? source.density : fallback.density;
     const density = APPEARANCE_DENSITIES.includes(densitySource) ? densitySource : "confortavel";
-    return { scheme: scheme, lastDarkScheme: lastDarkScheme, accent: accent, contrast: contrast, radius: radius, density: density };
+    const colors = normalizeAppearanceColors(source.colors != null ? source.colors : fallback.colors);
+    const customThemes = normalizeCustomThemes(source.customThemes != null ? source.customThemes : fallback.customThemes);
+    const activeSource = typeof source.activeThemeId === "string" ? source.activeThemeId : (typeof fallback.activeThemeId === "string" ? fallback.activeThemeId : "");
+    const activeThemeId = customThemes.some(function (theme) { return theme.id === activeSource; }) ? activeSource : "";
+    return { scheme: scheme, lastDarkScheme: lastDarkScheme, accent: accent, contrast: contrast, radius: radius, density: density, colors: colors, customThemes: customThemes, activeThemeId: activeThemeId };
   }
   function newState() {
     return { promptCategory: "", promptLocation: "", promptText: defaultPrompt, promptBlocks: promptBlocksFromText(defaultPrompt), promptHistory: [], leads: [], reminders: [], sales: [], promptTemplates: defaultPromptTemplates(), appearance: normalizeAppearance(), _promptUpdatedAt: "", _schemaVersion: SCHEMA_VERSION };
@@ -1134,19 +1208,26 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     state.appearance = appearance;
     const root = document.documentElement;
     const light = appearance.scheme === "papel";
+    const colors = appearance.colors || {};
     root.dataset.scheme = appearance.scheme;
     root.dataset.theme = light ? "light" : "dark";
     root.dataset.density = appearance.density;
     root.style.setProperty("--radius-user", appearance.radius + "px");
-    ["--muted", "--green", "--green-dark", "--green-soft", "--focus", "--accent-text"].forEach(function (token) {
+    ["--muted", "--green", "--green-dark", "--green-soft", "--focus", "--accent-text"].concat(APPEARANCE_COLOR_ORDER.map(function (token) { return "--" + token; })).forEach(function (token) {
       root.style.removeProperty(token);
+    });
+    APPEARANCE_COLOR_ORDER.forEach(function (token) {
+      if (!colors[token]) return;
+      if (token === "topbar-bg") root.style.setProperty("--topbar-bg", rgbaFromHex(colors[token], light ? .94 : .88));
+      else if (token === "focus") root.style.setProperty("--focus", rgbaFromHex(colors[token], light ? .72 : .62));
+      else root.style.setProperty("--" + token, colors[token]);
     });
     const styles = getComputedStyle(root);
     const canvas = styles.getPropertyValue("--canvas").trim() || (light ? "#f4f2ec" : "#0c1210");
     const paper = styles.getPropertyValue("--paper").trim() || (light ? "#ffffff" : "#151c18");
     const ink = styles.getPropertyValue("--ink").trim() || (light ? "#1e241e" : "#edf3ee");
     const muted = styles.getPropertyValue("--muted").trim() || (light ? "#676d63" : "#a1aea4");
-    if (appearance.contrast !== 50) {
+    if (!colors.muted && appearance.contrast !== 50) {
       const weight = Math.abs(appearance.contrast - 50) / 50;
       let adjusted = muted;
       if (appearance.contrast > 50) {
@@ -1167,19 +1248,35 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       const accent = appearance.accent;
       const greenDark = mixHex(accent, "#000000", light ? .15 : .08);
       const focusBase = light ? greenDark : accent;
-      root.style.setProperty("--green", accent);
-      root.style.setProperty("--green-dark", greenDark);
-      root.style.setProperty("--green-soft", mixHex(light ? "#ffffff" : canvas, accent, light ? .08 : .12));
-      root.style.setProperty("--focus", rgbaFromHex(focusBase, light ? .72 : .62));
+      if (!colors.green) root.style.setProperty("--green", accent);
+      if (!colors["green-dark"]) root.style.setProperty("--green-dark", greenDark);
+      if (!colors["green-soft"]) root.style.setProperty("--green-soft", mixHex(light ? "#ffffff" : canvas, accent, light ? .08 : .12));
+      if (!colors.focus) root.style.setProperty("--focus", rgbaFromHex(focusBase, light ? .72 : .62));
       root.style.setProperty("--accent-text", accentTextFor(accent));
+    } else if (colors.green) {
+      root.style.setProperty("--accent-text", accentTextFor(colors.green));
     }
+    const effectiveCanvas = getComputedStyle(root).getPropertyValue("--canvas").trim() || canvas;
+    const canvasLuminance = colorLuminance(effectiveCanvas);
+    if (canvasLuminance != null) root.style.colorScheme = canvasLuminance > .5 ? "light" : "dark";
     updateThemeToggle(appearance);
     const themeColor = document.querySelector('meta[name="theme-color"]');
-    if (themeColor) themeColor.content = canvas;
+    if (themeColor) themeColor.content = effectiveCanvas;
     if (cache) writeAppearanceCache(appearance);
+  }
+  function cssColorToHex(value) {
+    const clean = String(value == null ? "" : value).trim();
+    if (/^#[0-9a-f]{6}$/i.test(clean)) return clean.toLowerCase();
+    if (/^#[0-9a-f]{3}$/i.test(clean)) return ("#" + clean.slice(1).split("").map(function (c) { return c + c; }).join("")).toLowerCase();
+    const match = clean.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+    if (!match) return "";
+    return "#" + [match[1], match[2], match[3]].map(function (channel) {
+      return Math.max(0, Math.min(255, Math.round(Number(channel)))).toString(16).padStart(2, "0");
+    }).join("");
   }
   let appearanceSaveTimer = null;
   let appearanceDirty = false;
+  let appearanceAdvancedOpen = false;
   function scheduleAppearanceSave() {
     appearanceDirty = true;
     clearTimeout(appearanceSaveTimer);
@@ -1199,11 +1296,164 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     renderAppearance();
     if (persist) scheduleAppearanceSave();
   }
+  function appearanceValues(appearance) {
+    const styles = getComputedStyle(document.documentElement);
+    const values = {};
+    APPEARANCE_COLOR_ORDER.forEach(function (token) {
+      values[token] = appearance.colors[token] || cssColorToHex(styles.getPropertyValue("--" + token));
+    });
+    return values;
+  }
+  function appearanceColorRow(token, value, overridden) {
+    const meta = APPEARANCE_COLOR_TOKENS[token];
+    const hexValue = /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
+    return '<div class="appearance-color-row' + (overridden ? " is-overridden" : "") + '" data-color-row="' + token + '">' +
+      '<span class="appearance-color-copy"><span class="appearance-color-name">' + escapeHtml(meta.label) + '</span><small class="appearance-color-value">' + escapeHtml(value || "—") + '</small></span>' +
+      '<input type="color" data-color-token="' + token + '" value="' + hexValue + '" aria-label="Cor de ' + escapeHtml(meta.label) + '">' +
+      '<button type="button" class="appearance-color-reset" data-reset-token="' + token + '" aria-label="Voltar ' + escapeHtml(meta.label) + ' ao padrão do tema" title="Usar padrão do tema"' + (overridden ? "" : " disabled") + '>↺</button>' +
+      '</div>';
+  }
+  function appearanceContrastWarning(values) {
+    const pairs = [
+      [values.ink, values.paper, 4.5],
+      [values.ink, values.canvas, 4.5],
+      [values.muted, values.paper, 3]
+    ];
+    const low = pairs.some(function (pair) {
+      return colorLuminance(pair[0]) != null && colorLuminance(pair[1]) != null && contrastRatio(pair[0], pair[1]) < pair[2];
+    });
+    return low ? "Pouco contraste entre texto e fundo. A leitura pode ficar difícil." : "";
+  }
+  function updateAppearanceContrastWarning(values) {
+    const warning = $("#appearanceContrastWarning");
+    if (!warning) return;
+    const message = appearanceContrastWarning(values);
+    warning.textContent = message;
+    warning.hidden = !message;
+  }
+  function renderAppearanceColors(appearance) {
+    const values = appearanceValues(appearance);
+    updateAppearanceContrastWarning(values);
+    const primary = $("#appearancePrimaryColors");
+    if (primary) {
+      primary.innerHTML = APPEARANCE_PRIMARY_TOKENS.map(function (token) {
+        return appearanceColorRow(token, values[token], !!appearance.colors[token]);
+      }).join("");
+    }
+    const advanced = $("#appearanceAdvancedColors");
+    if (advanced) {
+      advanced.innerHTML = APPEARANCE_COLOR_GROUPS.map(function (group) {
+        const rows = APPEARANCE_COLOR_ORDER.filter(function (token) {
+          return APPEARANCE_COLOR_TOKENS[token].group === group.id;
+        }).map(function (token) {
+          return appearanceColorRow(token, values[token], !!appearance.colors[token]);
+        }).join("");
+        return '<div class="appearance-advanced-group"><h4>' + escapeHtml(group.title) + '</h4>' + rows + '</div>';
+      }).join("");
+      advanced.hidden = !appearanceAdvancedOpen;
+    }
+    const toggle = $("#appearanceAdvancedToggle");
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", String(appearanceAdvancedOpen));
+      toggle.textContent = appearanceAdvancedOpen ? "Ocultar cores avançadas" : "Mostrar todas as cores";
+    }
+  }
+  function renderAppearanceThemes(appearance) {
+    const list = $("#appearanceThemes");
+    if (!list) return;
+    list.innerHTML = appearance.customThemes.map(function (theme) {
+      const preview = APPEARANCE_SCHEME_PREVIEW[theme.scheme] || APPEARANCE_SCHEME_PREVIEW.floresta;
+      const canvas = theme.colors.canvas || preview[0];
+      const paper = theme.colors.paper || preview[1];
+      const accent = theme.accent || theme.colors.green || preview[2];
+      const active = theme.id === appearance.activeThemeId;
+      return '<div class="appearance-theme">' +
+        '<button type="button" class="appearance-theme-main" data-theme-id="' + escapeHtml(theme.id) + '" aria-pressed="' + String(active) + '">' +
+        '<span class="appearance-theme-swatches" aria-hidden="true"><i style="background:' + canvas + '"></i><i style="background:' + paper + '"></i><i style="background:' + accent + '"></i></span>' +
+        '<span class="appearance-theme-name">' + escapeHtml(theme.name) + '</span>' +
+        '</button>' +
+        '<button type="button" class="appearance-theme-delete" data-delete-theme="' + escapeHtml(theme.id) + '" aria-label="Excluir tema ' + escapeHtml(theme.name) + '">×</button>' +
+        '</div>';
+    }).join("");
+    const empty = $("#appearanceThemesEmpty");
+    if (empty) empty.hidden = appearance.customThemes.length > 0;
+  }
+  function refreshAppearanceColorRow(token) {
+    const rows = document.querySelectorAll('[data-color-row="' + token + '"]');
+    if (!rows.length) return;
+    const appearance = normalizeAppearance(state.appearance);
+    const styles = getComputedStyle(document.documentElement);
+    const value = appearance.colors[token] || cssColorToHex(styles.getPropertyValue("--" + token));
+    rows.forEach(function (row) {
+      const text = row.querySelector(".appearance-color-value");
+      if (text) text.textContent = value || "—";
+      row.classList.toggle("is-overridden", !!appearance.colors[token]);
+      const reset = row.querySelector(".appearance-color-reset");
+      if (reset) reset.disabled = !appearance.colors[token];
+    });
+    updateAppearanceContrastWarning(appearanceValues(appearance));
+  }
+  function setAppearanceColor(token, value, persist) {
+    if (!APPEARANCE_COLOR_TOKENS[token]) return;
+    const clean = appearanceHex(value);
+    if (!clean) return;
+    const colors = Object.assign({}, state.appearance.colors);
+    colors[token] = clean;
+    state.appearance = normalizeAppearance(Object.assign({}, state.appearance, { colors: colors, activeThemeId: "" }));
+    applyAppearance(state.appearance, true);
+    refreshAppearanceColorRow(token);
+    if (persist) scheduleAppearanceSave();
+  }
+  function resetAppearanceColor(token) {
+    if (!APPEARANCE_COLOR_TOKENS[token] || !state.appearance.colors[token]) return;
+    const colors = Object.assign({}, state.appearance.colors);
+    delete colors[token];
+    updateAppearance({ colors: colors, activeThemeId: "" }, true);
+  }
+  function saveAppearanceTheme() {
+    const input = $("#appearanceThemeName");
+    const name = input ? input.value.trim().slice(0, 40) : "";
+    if (!name) {
+      showToast("Dê um nome ao tema.");
+      if (input) input.focus();
+      return;
+    }
+    const current = normalizeAppearance(state.appearance);
+    const themes = current.customThemes.slice();
+    const existing = themes.find(function (theme) { return normalize(theme.name) === normalize(name); });
+    let id;
+    if (existing) {
+      id = existing.id;
+      Object.assign(existing, { name: name, scheme: current.scheme, accent: current.accent, colors: Object.assign({}, current.colors) });
+    } else {
+      id = "theme-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+      themes.push({ id: id, name: name, scheme: current.scheme, accent: current.accent, colors: Object.assign({}, current.colors) });
+    }
+    updateAppearance({ customThemes: themes, activeThemeId: id }, true);
+    if (input) input.value = "";
+    showToast(existing ? 'Tema "' + name + '" atualizado.' : 'Tema "' + name + '" salvo.');
+  }
+  function applyAppearanceTheme(id) {
+    const current = normalizeAppearance(state.appearance);
+    const theme = current.customThemes.find(function (item) { return item.id === id; });
+    if (!theme) return;
+    updateAppearance({ scheme: theme.scheme, lastDarkScheme: theme.scheme === "papel" ? current.lastDarkScheme : theme.scheme, accent: theme.accent, colors: Object.assign({}, theme.colors), activeThemeId: theme.id }, true);
+  }
+  function deleteAppearanceTheme(id) {
+    const current = normalizeAppearance(state.appearance);
+    const theme = current.customThemes.find(function (item) { return item.id === id; });
+    if (!theme) return;
+    const themes = current.customThemes.filter(function (item) { return item.id !== id; });
+    updateAppearance({ customThemes: themes, activeThemeId: current.activeThemeId === id ? "" : current.activeThemeId }, true);
+    showToast('Tema "' + theme.name + '" excluído.');
+  }
   function chooseAppearanceAccent(hex) {
     const appearance = normalizeAppearance(state.appearance);
     const accents = APPEARANCE_ACCENTS[appearance.scheme] || [];
     const value = String(hex || "").toLowerCase();
-    updateAppearance({ accent: value === accents[0] ? "" : value }, true);
+    const colors = Object.assign({}, appearance.colors);
+    APPEARANCE_ACCENT_TOKENS.forEach(function (token) { delete colors[token]; });
+    updateAppearance({ accent: value === accents[0] ? "" : value, colors: colors, activeThemeId: "" }, true);
   }
   function renderAppearance() {
     const dialog = $("#appearanceDialog");
@@ -1223,6 +1473,8 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
         return '<button type="button" class="appearance-accent" data-accent="' + hex + '" style="--swatch:' + hex + ';--swatch-ink:' + accentTextFor(hex) + '" aria-label="Destaque ' + (index + 1) + ' de ' + accents.length + ', ' + hex + '" aria-pressed="' + String(chosen === hex) + '"></button>';
       }).join("");
     }
+    renderAppearanceColors(appearance);
+    renderAppearanceThemes(appearance);
     const color = $("#appearanceColor");
     if (color) color.value = chosen;
     const hex = $("#appearanceHex");
@@ -4303,7 +4555,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const button = event.target.closest(".appearance-preset");
     if (!button) return;
     const scheme = button.dataset.scheme;
-    updateAppearance({ scheme: scheme, lastDarkScheme: scheme === "papel" ? normalizeAppearance(state.appearance).lastDarkScheme : scheme, accent: "" }, true);
+    updateAppearance({ scheme: scheme, lastDarkScheme: scheme === "papel" ? normalizeAppearance(state.appearance).lastDarkScheme : scheme, accent: "", colors: {}, activeThemeId: "" }, true);
   });
   $("#appearancePresets").addEventListener("keydown", function (event) {
     const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
@@ -4334,7 +4586,43 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   $("#appearanceHex").addEventListener("blur", function () {
     renderAppearance();
   });
-  $("#appearanceAccentReset").addEventListener("click", function () { updateAppearance({ accent: "" }, true); });
+  $("#appearanceAccentReset").addEventListener("click", function () { chooseAppearanceAccent(""); });
+  ["appearancePrimaryColors", "appearanceAdvancedColors"].forEach(function (id) {
+    const container = $("#" + id);
+    if (!container) return;
+    container.addEventListener("input", function (event) {
+      const input = event.target.closest("input[data-color-token]");
+      if (input) setAppearanceColor(input.dataset.colorToken, input.value, true);
+    });
+    container.addEventListener("change", function (event) {
+      const input = event.target.closest("input[data-color-token]");
+      if (input) renderAppearance();
+    });
+    container.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-reset-token]");
+      if (button) resetAppearanceColor(button.dataset.resetToken);
+    });
+  });
+  $("#appearanceAdvancedToggle").addEventListener("click", function () {
+    appearanceAdvancedOpen = !appearanceAdvancedOpen;
+    renderAppearanceColors(normalizeAppearance(state.appearance));
+  });
+  $("#appearanceThemeSave").addEventListener("click", saveAppearanceTheme);
+  $("#appearanceThemeName").addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveAppearanceTheme();
+    }
+  });
+  $("#appearanceThemes").addEventListener("click", function (event) {
+    const remove = event.target.closest("[data-delete-theme]");
+    if (remove) {
+      deleteAppearanceTheme(remove.dataset.deleteTheme);
+      return;
+    }
+    const button = event.target.closest("[data-theme-id]");
+    if (button) applyAppearanceTheme(button.dataset.themeId);
+  });
   $("#appearanceContrast").addEventListener("input", function () { updateAppearance({ contrast: Number(this.value) }, true); });
   $("#appearanceRadius").addEventListener("input", function () { updateAppearance({ radius: Number(this.value) }, true); });
   $("#appearanceDensity").addEventListener("click", function (event) {
@@ -4342,7 +4630,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (button) updateAppearance({ density: button.dataset.density }, true);
   });
   $("#appearanceResetAll").addEventListener("click", function () {
-    updateAppearance({ scheme: "floresta", lastDarkScheme: "floresta", accent: "", contrast: 50, radius: 12, density: "confortavel" }, true);
+    updateAppearance({ scheme: "floresta", lastDarkScheme: "floresta", accent: "", colors: {}, contrast: 50, radius: 12, density: "confortavel", activeThemeId: "" }, true);
   });
   window.addEventListener("pagehide", commitAppearance);
   leadDialog.addEventListener("close", resetLeadDialog);

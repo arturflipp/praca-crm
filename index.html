@@ -56,15 +56,28 @@
         root.dataset.density = density;
         root.style.setProperty("--radius-user", radius + "px");
         var light = scheme === "papel";
-        var canvas = palette[0];
-        var ink = palette[2];
-        var muted = palette[3];
-        if (contrast !== 50) {
+        var colorTokens = ["canvas", "paper", "sidebar-bg", "topbar-bg", "surface-2", "surface-3", "control-bg", "hover-bg", "ink", "muted", "control-ink", "nav-ink", "line", "control-border", "row-line", "green", "green-dark", "green-soft", "focus", "orange", "orange-soft", "red"];
+        var colorSource = app && app.colors && typeof app.colors === "object" ? app.colors : {};
+        var overrides = {};
+        colorTokens.forEach(function (token) {
+          var value = colorSource[token];
+          if (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)) overrides[token] = value.toLowerCase();
+        });
+        Object.keys(overrides).forEach(function (token) {
+          var value = overrides[token];
+          if (token === "topbar-bg") root.style.setProperty("--topbar-bg", "rgba(" + rgb(value).join(",") + "," + (light ? .94 : .88) + ")");
+          else if (token === "focus") root.style.setProperty("--focus", "rgba(" + rgb(value).join(",") + "," + (light ? .72 : .62) + ")");
+          else root.style.setProperty("--" + token, value);
+        });
+        var canvas = overrides.canvas || palette[0];
+        var ink = overrides.ink || palette[2];
+        var muted = overrides.muted || palette[3];
+        if (!overrides.muted && contrast !== 50) {
           var weight = Math.abs(contrast - 50) / 50;
           var adjusted = muted;
           if (contrast > 50) adjusted = mix(muted, ink, Math.min(.92, weight * .92));
           else {
-            var surface = palette[4];
+            var surface = overrides["surface-3"] || palette[4];
             var amount = Math.min(.28, weight * .28);
             var candidate = mix(muted, canvas, amount);
             while (amount > 0 && ratio(candidate, surface) < 4.5) {
@@ -79,20 +92,23 @@
         if (accent) {
           var dark = mix(accent, "#000000", light ? .15 : .08);
           var focusRgb = rgb(light ? dark : accent);
-          root.style.setProperty("--green", accent);
-          root.style.setProperty("--green-dark", dark);
-          root.style.setProperty("--green-soft", mix(light ? "#ffffff" : canvas, accent, light ? .08 : .12));
-          root.style.setProperty("--focus", "rgba(" + focusRgb.join(",") + "," + (light ? .72 : .62) + ")");
+          if (!overrides.green) root.style.setProperty("--green", accent);
+          if (!overrides["green-dark"]) root.style.setProperty("--green-dark", dark);
+          if (!overrides["green-soft"]) root.style.setProperty("--green-soft", mix(light ? "#ffffff" : canvas, accent, light ? .08 : .12));
+          if (!overrides.focus) root.style.setProperty("--focus", "rgba(" + focusRgb.join(",") + "," + (light ? .72 : .62) + ")");
           root.style.setProperty("--accent-text", ratio("#0b1710", accent) >= ratio("#ffffff", accent) ? "#0b1710" : "#ffffff");
+        } else if (overrides.green) {
+          root.style.setProperty("--accent-text", ratio("#0b1710", overrides.green) >= ratio("#ffffff", overrides.green) ? "#0b1710" : "#ffffff");
         }
+        root.style.colorScheme = luminance(canvas) > .5 ? "light" : "dark";
         var themeColor = document.querySelector('meta[name="theme-color"]');
         if (themeColor) themeColor.content = canvas;
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=35">
+  <link rel="stylesheet" href="styles.css?v=36">
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=35" defer></script>
+  <script src="app.js?v=36" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -570,6 +586,22 @@
             <div class="appearance-hex-field"><label for="appearanceHex">Código</label><input id="appearanceHex" type="text" inputmode="text" maxlength="7" spellcheck="false" autocomplete="off" placeholder="#7fbf97" aria-label="Código hex do destaque" aria-describedby="appearanceHexError"><p id="appearanceHexError" class="appearance-hex-error" role="alert"></p></div>
           </div>
           <button class="text-button" id="appearanceAccentReset" type="button">Usar padrão do tema</button>
+        </section>
+        <section class="appearance-group">
+          <div class="appearance-group-head"><h3>Cores do tema</h3><p>Ajuste fundo, textos e linhas. O que você não mudar continua vindo do tema escolhido.</p></div>
+          <div class="appearance-color-list" id="appearancePrimaryColors"></div>
+          <p class="appearance-contrast-warning" id="appearanceContrastWarning" role="status" hidden></p>
+          <button class="text-button appearance-advanced-toggle" id="appearanceAdvancedToggle" type="button" aria-expanded="false" aria-controls="appearanceAdvancedColors">Mostrar todas as cores</button>
+          <div class="appearance-advanced" id="appearanceAdvancedColors" hidden></div>
+        </section>
+        <section class="appearance-group">
+          <div class="appearance-group-head"><h3>Meus temas</h3><p>Salve a combinação atual e volte a ela quando quiser.</p></div>
+          <div class="appearance-save-theme">
+            <input id="appearanceThemeName" type="text" maxlength="40" placeholder="Nome do tema" aria-label="Nome do novo tema">
+            <button class="button button-secondary" id="appearanceThemeSave" type="button">Salvar tema</button>
+          </div>
+          <div class="appearance-themes" id="appearanceThemes"></div>
+          <p class="appearance-empty" id="appearanceThemesEmpty">Nenhum tema salvo ainda.</p>
         </section>
         <section class="appearance-group">
           <div class="appearance-range-head"><h3>Contraste do texto</h3><output id="appearanceContrastValue" for="appearanceContrast">50</output></div>
