@@ -6,7 +6,47 @@
   const LEAD_SORT_KEY = "praca-crm-lead-sort-v1";
   const THEME_KEY = "praca-crm-theme-v1";
   const APPEARANCE_KEY = "art-crm-appearance-v1";
-  const APPEARANCE_SCHEMES = ["floresta", "grafite", "petroleo", "vinho", "bronze", "oliva", "papel"];
+  const APPEARANCE_SCHEME_META = {
+    floresta: { family: "floresta", mode: "dark", name: "Floresta" },
+    grafite: { family: "grafite", mode: "dark", name: "Grafite" },
+    petroleo: { family: "petroleo", mode: "dark", name: "Petróleo" },
+    vinho: { family: "vinho", mode: "dark", name: "Vinho" },
+    bronze: { family: "bronze", mode: "dark", name: "Bronze" },
+    oliva: { family: "oliva", mode: "dark", name: "Oliva" },
+    papel: { family: "papel", mode: "light", name: "Papel" },
+    "matrix-light": { family: "matrix", mode: "light", name: "Matrix" },
+    "matrix-medium": { family: "matrix", mode: "medium", name: "Matrix" },
+    "matrix-dark": { family: "matrix", mode: "dark", name: "Matrix" },
+    "vermelhao-light": { family: "vermelhao", mode: "light", name: "Vermelhão" },
+    "vermelhao-medium": { family: "vermelhao", mode: "medium", name: "Vermelhão" },
+    "vermelhao-dark": { family: "vermelhao", mode: "dark", name: "Vermelhão" },
+    "ciberpunk-light": { family: "ciberpunk", mode: "light", name: "Ciberpunk" },
+    "ciberpunk-dark": { family: "ciberpunk", mode: "dark", name: "Ciberpunk" },
+    "oceano-light": { family: "oceano", mode: "light", name: "Oceano" },
+    "oceano-medium": { family: "oceano", mode: "medium", name: "Oceano" },
+    "oceano-dark": { family: "oceano", mode: "dark", name: "Oceano" },
+    "pordosol-light": { family: "pordosol", mode: "light", name: "Pôr do sol" },
+    "pordosol-dark": { family: "pordosol", mode: "dark", name: "Pôr do sol" },
+    "sakura-light": { family: "sakura", mode: "light", name: "Sakura" },
+    "sakura-dark": { family: "sakura", mode: "dark", name: "Sakura" },
+    "cafe-light": { family: "cafe", mode: "light", name: "Café" },
+    "cafe-dark": { family: "cafe", mode: "dark", name: "Café" },
+    "nevoa-light": { family: "nevoa", mode: "light", name: "Névoa" },
+    "nevoa-medium": { family: "nevoa", mode: "medium", name: "Névoa" },
+    "nevoa-dark": { family: "nevoa", mode: "dark", name: "Névoa" }
+  };
+  const APPEARANCE_SCHEMES = Object.keys(APPEARANCE_SCHEME_META);
+  const APPEARANCE_FAMILY_GROUPS = [
+    { id: "classic", title: "Clássicos", families: ["floresta", "grafite", "petroleo", "vinho", "bronze", "oliva", "papel"] },
+    { id: "fun", title: "Temáticos", families: ["matrix", "vermelhao", "ciberpunk", "oceano", "pordosol", "sakura", "cafe", "nevoa"] }
+  ];
+  const APPEARANCE_FAMILIES = {};
+  APPEARANCE_SCHEMES.forEach(function (id) {
+    const meta = APPEARANCE_SCHEME_META[id];
+    if (!APPEARANCE_FAMILIES[meta.family]) APPEARANCE_FAMILIES[meta.family] = { name: meta.name, variants: [] };
+    APPEARANCE_FAMILIES[meta.family].variants.push(id);
+  });
+  const APPEARANCE_MODE_LABELS = { light: "Claro", medium: "Médio", dark: "Escuro" };
   const APPEARANCE_DENSITIES = ["compacta", "confortavel", "espacada"];
   const APPEARANCE_ACCENTS = {
     floresta: ["#7fbf97", "#8fc7a5", "#6fb48c", "#5fa57d"],
@@ -24,7 +64,27 @@
     vinho: ["#130f11", "#1b1619", "#ce8b8b"],
     bronze: ["#12100c", "#1a1712", "#d0a566"],
     oliva: ["#10110d", "#181a14", "#b3c17c"],
-    papel: ["#f4f2ec", "#ffffff", "#356b4d"]
+    papel: ["#f4f2ec", "#ffffff", "#356b4d"],
+    "matrix-light": ["#f2f7f4", "#fefefe", "#1f8a4c"],
+    "matrix-medium": ["#49795b", "#59886a", "#39ff88"],
+    "matrix-dark": ["#0e1611", "#162019", "#39ff88"],
+    "vermelhao-light": ["#f8f2f2", "#fefefe", "#b32626"],
+    "vermelhao-medium": ["#7b4846", "#8a5856", "#ff6b62"],
+    "vermelhao-dark": ["#160e0e", "#211515", "#ff5a5a"],
+    "ciberpunk-light": ["#f8f2f7", "#fefefe", "#a11a84"],
+    "ciberpunk-dark": ["#160d15", "#21141f", "#ff4fd8"],
+    "oceano-light": ["#f3f7f7", "#fefefe", "#137a72"],
+    "oceano-medium": ["#4c7673", "#5b8582", "#54e6d5"],
+    "oceano-dark": ["#0f1515", "#161f1f", "#4fe0d0"],
+    "pordosol-light": ["#f8f4f2", "#fefefe", "#a4471a"],
+    "pordosol-dark": ["#16110d", "#211a15", "#ff9e64"],
+    "sakura-light": ["#f7f2f4", "#fefefe", "#a83b6d"],
+    "sakura-dark": ["#160e11", "#20151a", "#ff9ec7"],
+    "cafe-light": ["#f7f5f3", "#fefefe", "#7a4a1f"],
+    "cafe-dark": ["#14120f", "#1e1b17", "#d9a066"],
+    "nevoa-light": ["#f4f5f6", "#fefefe", "#3f5a72"],
+    "nevoa-medium": ["#58616a", "#677079", "#a9bccf"],
+    "nevoa-dark": ["#101213", "#191b1d", "#9fb3c8"]
   };
   const APPEARANCE_COLOR_TOKENS = {
     canvas: { label: "Fundo da página", group: "surface" },
@@ -778,6 +838,27 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   function appearanceHex(value) {
     return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "";
   }
+  function schemeMode(scheme) {
+    const meta = APPEARANCE_SCHEME_META[scheme];
+    return meta ? meta.mode : "dark";
+  }
+  function isLightScheme(scheme) {
+    return schemeMode(scheme) === "light";
+  }
+  function schemeFamily(scheme) {
+    const meta = APPEARANCE_SCHEME_META[scheme];
+    return meta ? meta.family : scheme;
+  }
+  function familyScheme(family, mode) {
+    const id = family + "-" + mode;
+    return APPEARANCE_SCHEME_META[id] ? id : "";
+  }
+  function appearanceAccents(scheme) {
+    if (APPEARANCE_ACCENTS[scheme]) return APPEARANCE_ACCENTS[scheme];
+    const preview = APPEARANCE_SCHEME_PREVIEW[scheme] || APPEARANCE_SCHEME_PREVIEW.floresta;
+    const green = preview[2];
+    return [green, mixHex(green, "#ffffff", .12), mixHex(green, "#000000", .12), mixHex(green, "#000000", .24)];
+  }
   function normalizeAppearanceColors(value) {
     const source = value && typeof value === "object" ? value : {};
     const colors = {};
@@ -798,8 +879,10 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       const schemeSource = typeof item.scheme === "string" ? item.scheme : "floresta";
       const scheme = APPEARANCE_SCHEMES.includes(schemeSource) ? schemeSource : "floresta";
       const accent = appearanceHex(item.accent);
+      const autoSource = typeof item.autoMode === "string" ? item.autoMode : "";
+      const autoMode = ["light", "medium", "dark"].includes(autoSource) ? autoSource : "";
       const id = typeof item.id === "string" && item.id ? item.id : appearanceThemeId(name, index);
-      return { id: id, name: name, scheme: scheme, accent: accent, colors: normalizeAppearanceColors(item.colors) };
+      return { id: id, name: name, scheme: scheme, accent: accent, colors: normalizeAppearanceColors(item.colors), autoMode: autoMode };
     }).filter(Boolean).slice(0, 24);
   }
   function normalizeAppearance(value) {
@@ -808,7 +891,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const schemeSource = typeof source.scheme === "string" ? source.scheme : fallback.scheme;
     const scheme = APPEARANCE_SCHEMES.includes(schemeSource) ? schemeSource : "floresta";
     const darkSource = typeof source.lastDarkScheme === "string" ? source.lastDarkScheme : fallback.lastDarkScheme;
-    const lastDarkScheme = APPEARANCE_SCHEMES.includes(darkSource) && darkSource !== "papel" ? darkSource : (scheme !== "papel" ? scheme : "floresta");
+    const lastDarkScheme = APPEARANCE_SCHEMES.includes(darkSource) && schemeMode(darkSource) === "dark" ? darkSource : (schemeMode(scheme) === "dark" ? scheme : "floresta");
     const accentSource = typeof source.accent === "string" ? source.accent : fallback.accent;
     const accent = accentSource === "" || /^#[0-9a-f]{6}$/i.test(accentSource) ? accentSource.toLowerCase() : "";
     const contrast = appearanceNumber(source.contrast != null ? source.contrast : fallback.contrast, 0, 100, 50);
@@ -819,7 +902,9 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const customThemes = normalizeCustomThemes(source.customThemes != null ? source.customThemes : fallback.customThemes);
     const activeSource = typeof source.activeThemeId === "string" ? source.activeThemeId : (typeof fallback.activeThemeId === "string" ? fallback.activeThemeId : "");
     const activeThemeId = customThemes.some(function (theme) { return theme.id === activeSource; }) ? activeSource : "";
-    return { scheme: scheme, lastDarkScheme: lastDarkScheme, accent: accent, contrast: contrast, radius: radius, density: density, colors: colors, customThemes: customThemes, activeThemeId: activeThemeId };
+    const autoSource = typeof source.autoMode === "string" ? source.autoMode : (typeof fallback.autoMode === "string" ? fallback.autoMode : "");
+    const autoMode = ["light", "medium", "dark"].includes(autoSource) ? autoSource : "";
+    return { scheme: scheme, lastDarkScheme: lastDarkScheme, accent: accent, contrast: contrast, radius: radius, density: density, colors: colors, customThemes: customThemes, activeThemeId: activeThemeId, autoMode: autoMode };
   }
   function newState() {
     return { promptCategory: "", promptLocation: "", promptText: defaultPrompt, promptBlocks: promptBlocksFromText(defaultPrompt), promptHistory: [], leads: [], reminders: [], sales: [], promptTemplates: defaultPromptTemplates(), appearance: normalizeAppearance(), _promptUpdatedAt: "", _schemaVersion: SCHEMA_VERSION };
@@ -1190,13 +1275,13 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   function writeAppearanceCache(appearance) {
     try {
       localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
-      localStorage.setItem(THEME_KEY, appearance.scheme === "papel" ? "light" : "dark");
+      localStorage.setItem(THEME_KEY, isLightScheme(appearance.scheme) ? "light" : "dark");
     } catch (_) {}
   }
   function updateThemeToggle(appearance) {
     const toggle = $("#themeToggle");
     if (!toggle) return;
-    const light = appearance.scheme === "papel";
+    const light = isLightScheme(appearance.scheme);
     const label = toggle.querySelector(".theme-toggle-label");
     const action = light ? "Ativar tema escuro" : "Ativar tema claro";
     if (label) label.textContent = light ? "Escuro" : "Claro";
@@ -1207,10 +1292,12 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const appearance = normalizeAppearance(value);
     state.appearance = appearance;
     const root = document.documentElement;
-    const light = appearance.scheme === "papel";
+    const mode = schemeMode(appearance.scheme);
+    const light = mode === "light";
     const colors = appearance.colors || {};
     root.dataset.scheme = appearance.scheme;
     root.dataset.theme = light ? "light" : "dark";
+    root.dataset.mode = mode;
     root.dataset.density = appearance.density;
     root.style.setProperty("--radius-user", appearance.radius + "px");
     ["--muted", "--green", "--green-dark", "--green-soft", "--focus", "--accent-text"].concat(APPEARANCE_COLOR_ORDER.map(function (token) { return "--" + token; })).forEach(function (token) {
@@ -1277,6 +1364,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   let appearanceSaveTimer = null;
   let appearanceDirty = false;
   let appearanceAdvancedOpen = false;
+  let appearanceAutoMode = "";
   function scheduleAppearanceSave() {
     appearanceDirty = true;
     clearTimeout(appearanceSaveTimer);
@@ -1295,12 +1383,19 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (!appearance.activeThemeId) return;
     const themes = appearance.customThemes.map(function (theme) {
       if (theme.id !== appearance.activeThemeId) return theme;
-      return Object.assign({}, theme, { scheme: appearance.scheme, accent: appearance.accent, colors: Object.assign({}, appearance.colors) });
+      return Object.assign({}, theme, { scheme: appearance.scheme, accent: appearance.accent, colors: Object.assign({}, appearance.colors), autoMode: appearance.autoMode });
     });
     state.appearance = normalizeAppearance(Object.assign({}, appearance, { customThemes: themes }));
   }
   function updateAppearance(patch, persist) {
-    state.appearance = normalizeAppearance(Object.assign({}, state.appearance, patch));
+    const next = Object.assign({}, state.appearance, patch);
+    if (patch && Object.prototype.hasOwnProperty.call(patch, "autoMode")) {
+      appearanceAutoMode = patch.autoMode;
+    } else if (patch && patch.scheme) {
+      next.autoMode = schemeMode(next.scheme);
+      appearanceAutoMode = next.autoMode;
+    }
+    state.appearance = normalizeAppearance(next);
     syncActiveAppearanceTheme();
     applyAppearance(state.appearance, true);
     renderAppearance();
@@ -1368,31 +1463,184 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       toggle.textContent = appearanceAdvancedOpen ? "Ocultar cores avançadas" : "Mostrar todas as cores";
     }
   }
-  function renderAppearanceThemes(appearance) {
-    const list = $("#appearanceThemes");
-    if (!list) return;
-    list.innerHTML = appearance.customThemes.map(function (theme) {
-      const preview = APPEARANCE_SCHEME_PREVIEW[theme.scheme] || APPEARANCE_SCHEME_PREVIEW.floresta;
-      const canvas = theme.colors.canvas || preview[0];
-      const paper = theme.colors.paper || preview[1];
-      const accent = theme.accent || theme.colors.green || preview[2];
-      const active = theme.id === appearance.activeThemeId;
-      return '<div class="appearance-theme">' +
-        '<button type="button" class="appearance-theme-main" data-theme-id="' + escapeHtml(theme.id) + '" aria-pressed="' + String(active) + '">' +
-        '<span class="appearance-theme-swatches" aria-hidden="true"><i style="background:' + canvas + '"></i><i style="background:' + paper + '"></i><i style="background:' + accent + '"></i></span>' +
-        '<span class="appearance-theme-name">' + escapeHtml(theme.name) + '</span>' +
-        '</button>' +
-        '<button type="button" class="appearance-theme-delete" data-delete-theme="' + escapeHtml(theme.id) + '" aria-label="Excluir tema ' + escapeHtml(theme.name) + '">×</button>' +
-        '</div>';
-    }).join("");
-    const empty = $("#appearanceThemesEmpty");
-    if (empty) empty.hidden = appearance.customThemes.length > 0;
+  function appearanceSchemePreview(scheme) {
+    return APPEARANCE_SCHEME_PREVIEW[scheme] || APPEARANCE_SCHEME_PREVIEW.floresta;
+  }
+  function appearanceSwatches(canvas, paper, accent) {
+    return '<span class="preset-swatches" aria-hidden="true"><i style="background:' + canvas + '"></i><i style="background:' + paper + '"></i><i style="background:' + accent + '"></i></span>';
+  }
+  function appearanceFamilyPreview(family, appearance) {
+    if (family.variants.includes(appearance.scheme)) return appearance.scheme;
+    const mode = schemeMode(appearance.scheme);
+    return family.variants.find(function (id) { return schemeMode(id) === mode; }) ||
+      family.variants.find(function (id) { return schemeMode(id) === "dark"; }) ||
+      family.variants[0];
+  }
+  function renderAppearancePresets(appearance) {
+    const container = $("#appearancePresets");
+    if (!container) return;
+    let html = "";
+    APPEARANCE_FAMILY_GROUPS.forEach(function (group) {
+      html += '<div class="appearance-preset-group"><h4 class="appearance-preset-group-title">' + escapeHtml(group.title) + '</h4><div class="appearance-preset-grid">';
+      group.families.forEach(function (familyId) {
+        const family = APPEARANCE_FAMILIES[familyId];
+        if (!family) return;
+        const active = !appearance.activeThemeId && family.variants.includes(appearance.scheme);
+        const previewId = active ? appearance.scheme : appearanceFamilyPreview(family, appearance);
+        const preview = appearanceSchemePreview(previewId);
+        const variants = family.variants.length > 1 ? '<div class="preset-variants" role="group" aria-label="Variações de ' + escapeHtml(family.name) + '">' +
+          family.variants.map(function (id) {
+            const mode = schemeMode(id);
+            const pressed = !appearance.activeThemeId && appearance.scheme === id;
+            return '<button type="button" class="preset-variant' + (pressed ? ' is-active' : '') + '" data-scheme="' + id + '" aria-pressed="' + String(pressed) + '" aria-label="Aplicar ' + escapeHtml(family.name) + ' ' + APPEARANCE_MODE_LABELS[mode] + '"><i style="background:' + appearanceSchemePreview(id)[2] + '"></i>' + APPEARANCE_MODE_LABELS[mode] + '</button>';
+          }).join("") + '</div>' : "";
+        html += '<div class="appearance-preset-card' + (active ? ' is-active' : '') + '" data-family="' + familyId + '">' +
+          '<button type="button" class="appearance-preset appearance-preset-main" data-scheme="' + previewId + '" aria-pressed="' + String(active) + '">' +
+          appearanceSwatches(preview[0], preview[1], preview[2]) +
+          '<span class="preset-name">' + escapeHtml(family.name) + '</span></button>' +
+          variants + '</div>';
+      });
+      html += '</div></div>';
+    });
+    if (appearance.customThemes.length) {
+      html += '<div class="appearance-preset-group"><h4 class="appearance-preset-group-title">Meus temas</h4><div class="appearance-preset-grid">';
+      appearance.customThemes.forEach(function (theme) {
+        const preview = appearanceSchemePreview(theme.scheme);
+        const canvas = theme.colors.canvas || preview[0];
+        const paper = theme.colors.paper || preview[1];
+        const accent = theme.accent || theme.colors.green || preview[2];
+        const active = theme.id === appearance.activeThemeId;
+        html += '<div class="appearance-preset-card appearance-preset-custom' + (active ? ' is-active' : '') + '">' +
+          '<button type="button" class="appearance-preset appearance-preset-main" data-theme-id="' + escapeHtml(theme.id) + '" aria-pressed="' + String(active) + '">' +
+          appearanceSwatches(canvas, paper, accent) +
+          '<span class="preset-name">' + escapeHtml(theme.name) + '</span></button>' +
+          '<button type="button" class="appearance-theme-delete" data-delete-theme="' + escapeHtml(theme.id) + '" aria-label="Excluir tema ' + escapeHtml(theme.name) + '">×</button></div>';
+      });
+      html += '</div></div>';
+    } else {
+      html += '<p class="appearance-preset-empty">Seus temas salvos aparecem aqui.</p>';
+    }
+    container.innerHTML = html;
     const editing = $("#appearanceEditingTheme");
     if (editing) {
       const activeTheme = appearance.customThemes.find(function (theme) { return theme.id === appearance.activeThemeId; });
       editing.textContent = activeTheme ? 'Editando "' + activeTheme.name + '". As mudanças são salvas nele automaticamente.' : "";
       editing.hidden = !activeTheme;
     }
+  }
+  function hexToHsl(value) {
+    const hex = appearanceHex(value) || "#7fbf97";
+    const number = parseInt(hex.slice(1), 16);
+    const r = (number >> 16 & 255) / 255;
+    const g = (number >> 8 & 255) / 255;
+    const b = (number & 255) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const delta = max - min;
+    let h = 0;
+    if (delta) {
+      if (max === r) h = ((g - b) / delta) % 6;
+      else if (max === g) h = (b - r) / delta + 2;
+      else h = (r - g) / delta + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+    }
+    const l = (max + min) / 2;
+    const s = delta ? delta / (1 - Math.abs(2 * l - 1)) : 0;
+    return { h: h, s: s * 100, l: l * 100 };
+  }
+  function hslHex(h, s, l) {
+    h = ((h % 360) + 360) % 360 / 360;
+    s = Math.min(100, Math.max(0, s)) / 100;
+    l = Math.min(100, Math.max(0, l)) / 100;
+    if (s === 0) {
+      const channel = Math.round(l * 255).toString(16).padStart(2, "0");
+      return "#" + channel + channel + channel;
+    }
+    function channel(p, q, t) {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    }
+    const q = l < .5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    return "#" + [channel(p, q, h + 1 / 3), channel(p, q, h), channel(p, q, h - 1 / 3)].map(function (value) {
+      return Math.round(value * 255).toString(16).padStart(2, "0");
+    }).join("");
+  }
+  function generateAppearancePalette(accent, mode) {
+    const base = appearanceHex(accent) || "#7fbf97";
+    const hsl = hexToHsl(base);
+    const h = hsl.h;
+    const s = Math.max(8, hsl.s);
+    const light = mode === "light";
+    const medium = mode === "medium";
+    let mediumPaperL = 44;
+    if (medium) {
+      const mediumInk = hslHex(h, s * .12, 96);
+      while (mediumPaperL > 30 && contrastRatio(mediumInk, hslHex(h, s * .3, mediumPaperL)) < 4.5) mediumPaperL -= .5;
+    }
+    const canvas = light ? hslHex(h, s * .35, 96) : medium ? hslHex(h, s * .35, mediumPaperL - 6) : hslHex(h, s * .3, 7);
+    const paper = light ? hslHex(h, s * .2, 99.5) : medium ? hslHex(h, s * .3, mediumPaperL) : hslHex(h, s * .28, 10.5);
+    let green = light ? mixHex(base, "#000000", .42) : base;
+    let guard = 0;
+    if (light) {
+      while (guard < 10 && contrastRatio(green, paper) < 4.5) {
+        green = mixHex(green, "#000000", .08);
+        guard++;
+      }
+    } else {
+      while (guard < 10 && contrastRatio(green, paper) < 3.5) {
+        green = mixHex(green, "#ffffff", .08);
+        guard++;
+      }
+    }
+    const orange = hslHex(h + 42, 68, light ? 32 : medium ? 78 : 72);
+    return {
+      canvas: canvas,
+      paper: paper,
+      line: light ? hslHex(h, s * .2, 86) : medium ? hslHex(h, s * .2, mediumPaperL + 11) : hslHex(h, s * .18, 24),
+      ink: light ? hslHex(h, s * .45, 18) : medium ? hslHex(h, s * .12, 96) : hslHex(h, s * .1, 94),
+      muted: light ? hslHex(h, s * .22, 42) : medium ? hslHex(h, s * .12, 88) : hslHex(h, s * .12, 66),
+      green: green,
+      "green-dark": mixHex(green, "#000000", light ? .15 : .1),
+      "green-soft": light ? mixHex("#ffffff", green, .1) : medium ? mixHex(hslHex(h, s * .4, mediumPaperL - 20), green, .12) : mixHex(canvas, green, .16),
+      orange: orange,
+      "orange-soft": light ? mixHex("#ffffff", orange, .1) : medium ? mixHex(hslHex(h, s * .35, mediumPaperL - 20), orange, .12) : mixHex(canvas, orange, .16),
+      red: hslHex(0, 68, light ? 40 : medium ? 72 : 70),
+      "sidebar-bg": light ? hslHex(h, s * .3, 97.5) : medium ? hslHex(h, s * .32, mediumPaperL - 4) : hslHex(h, s * .3, 8.5),
+      "topbar-bg": canvas,
+      "surface-2": light ? hslHex(h, s * .3, 94) : medium ? hslHex(h, s * .28, mediumPaperL + 3) : hslHex(h, s * .26, 14),
+      "surface-3": light ? hslHex(h, s * .28, 91) : medium ? hslHex(h, s * .26, mediumPaperL + 6) : hslHex(h, s * .24, 17),
+      "control-bg": light ? hslHex(h, s * .15, 100) : medium ? hslHex(h, s * .26, mediumPaperL - 2) : hslHex(h, s * .24, 11),
+      "control-border": light ? hslHex(h, s * .18, 82) : medium ? hslHex(h, s * .2, mediumPaperL + 14) : hslHex(h, s * .18, 28),
+      "control-ink": light ? hslHex(h, s * .45, 18) : medium ? hslHex(h, s * .12, 96) : hslHex(h, s * .1, 94),
+      "hover-bg": light ? hslHex(h, s * .25, 93) : medium ? hslHex(h, s * .26, mediumPaperL + 4) : hslHex(h, s * .24, 15),
+      "row-line": light ? hslHex(h, s * .18, 89) : medium ? hslHex(h, s * .18, mediumPaperL + 8) : hslHex(h, s * .16, 20),
+      "nav-ink": light ? hslHex(h, s * .3, 34) : medium ? hslHex(h, s * .12, 90) : hslHex(h, s * .12, 76),
+      focus: green
+    };
+  }
+  function applyAutoAppearancePalette() {
+    const appearance = normalizeAppearance(state.appearance);
+    const mode = appearanceAutoMode || schemeMode(appearance.scheme);
+    const accents = appearanceAccents(appearance.scheme);
+    const seed = appearance.accent || accents[0] || "#7fbf97";
+    const colors = generateAppearancePalette(seed, mode);
+    const family = schemeFamily(appearance.scheme);
+    const scheme = familyScheme(family, mode) || (mode === "light" ? "papel" : "floresta");
+    updateAppearance({
+      scheme: scheme,
+      lastDarkScheme: schemeMode(scheme) === "dark" ? scheme : appearance.lastDarkScheme,
+      accent: colors.green,
+      colors: colors,
+      activeThemeId: appearance.activeThemeId,
+      autoMode: mode
+    }, true);
+    showToast("Paleta ajustada a partir do destaque.");
   }
   function refreshAppearanceColorRow(token) {
     const rows = document.querySelectorAll('[data-color-row="' + token + '"]');
@@ -1441,10 +1689,10 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     let id;
     if (existing) {
       id = existing.id;
-      Object.assign(existing, { name: name, scheme: current.scheme, accent: current.accent, colors: Object.assign({}, current.colors) });
+      Object.assign(existing, { name: name, scheme: current.scheme, accent: current.accent, colors: Object.assign({}, current.colors), autoMode: current.autoMode });
     } else {
       id = "theme-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
-      themes.push({ id: id, name: name, scheme: current.scheme, accent: current.accent, colors: Object.assign({}, current.colors) });
+      themes.push({ id: id, name: name, scheme: current.scheme, accent: current.accent, colors: Object.assign({}, current.colors), autoMode: current.autoMode });
     }
     updateAppearance({ customThemes: themes, activeThemeId: id }, true);
     if (input) input.value = "";
@@ -1454,7 +1702,9 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const current = normalizeAppearance(state.appearance);
     const theme = current.customThemes.find(function (item) { return item.id === id; });
     if (!theme) return;
-    updateAppearance({ scheme: theme.scheme, lastDarkScheme: theme.scheme === "papel" ? current.lastDarkScheme : theme.scheme, accent: theme.accent, colors: Object.assign({}, theme.colors), activeThemeId: theme.id }, true);
+    const dark = schemeMode(theme.scheme) === "dark";
+    appearanceAutoMode = schemeMode(theme.scheme);
+    updateAppearance({ scheme: theme.scheme, lastDarkScheme: dark ? theme.scheme : current.lastDarkScheme, accent: theme.accent, colors: Object.assign({}, theme.colors), activeThemeId: theme.id, autoMode: theme.autoMode || schemeMode(theme.scheme) }, true);
   }
   function deleteAppearanceTheme(id) {
     const current = normalizeAppearance(state.appearance);
@@ -1466,7 +1716,7 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   }
   function chooseAppearanceAccent(hex) {
     const appearance = normalizeAppearance(state.appearance);
-    const accents = APPEARANCE_ACCENTS[appearance.scheme] || [];
+    const accents = appearanceAccents(appearance.scheme);
     const value = String(hex || "").toLowerCase();
     const colors = Object.assign({}, appearance.colors);
     APPEARANCE_ACCENT_TOKENS.forEach(function (token) { delete colors[token]; });
@@ -1476,14 +1726,10 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     const dialog = $("#appearanceDialog");
     if (!dialog) return;
     const appearance = normalizeAppearance(state.appearance);
-    const accents = APPEARANCE_ACCENTS[appearance.scheme] || [];
+    if (!appearanceAutoMode) appearanceAutoMode = appearance.autoMode || schemeMode(appearance.scheme);
+    const accents = appearanceAccents(appearance.scheme);
     const chosen = appearance.accent || accents[0] || "";
-    $$(".appearance-preset", dialog).forEach(function (button) {
-      const active = button.dataset.scheme === appearance.scheme;
-      button.setAttribute("aria-checked", String(active));
-      button.classList.toggle("is-active", active);
-      button.tabIndex = active ? 0 : -1;
-    });
+    renderAppearancePresets(appearance);
     const swatches = $("#appearanceAccents");
     if (swatches) {
       swatches.innerHTML = accents.map(function (hex, index) {
@@ -1491,7 +1737,6 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       }).join("");
     }
     renderAppearanceColors(appearance);
-    renderAppearanceThemes(appearance);
     const color = $("#appearanceColor");
     if (color) color.value = chosen;
     const hex = $("#appearanceHex");
@@ -1516,11 +1761,28 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       button.setAttribute("aria-pressed", String(active));
       button.classList.toggle("is-active", active);
     });
+    $$(".appearance-auto-mode", dialog).forEach(function (button) {
+      const active = button.dataset.autoMode === appearanceAutoMode;
+      button.setAttribute("aria-pressed", String(active));
+      button.classList.toggle("is-active", active);
+    });
   }
   function setTheme(theme, persist) {
     const current = normalizeAppearance(state.appearance);
-    const target = theme === "light" ? "papel" : (current.scheme === "papel" ? current.lastDarkScheme : current.scheme);
-    state.appearance = normalizeAppearance(Object.assign({}, current, { scheme: target, lastDarkScheme: target === "papel" ? current.lastDarkScheme : target, colors: {}, activeThemeId: "" }));
+    const mode = schemeMode(current.scheme);
+    const family = schemeFamily(current.scheme);
+    const target = theme === "light"
+      ? (familyScheme(family, "light") || "papel")
+      : (familyScheme(family, "dark") || (mode === "light" ? current.lastDarkScheme : current.scheme));
+    const dark = schemeMode(target) === "dark";
+    appearanceAutoMode = schemeMode(target);
+    state.appearance = normalizeAppearance(Object.assign({}, current, {
+      scheme: target,
+      lastDarkScheme: dark ? target : current.lastDarkScheme,
+      colors: {},
+      activeThemeId: "",
+      autoMode: schemeMode(target)
+    }));
     applyAppearance(state.appearance, true);
     renderAppearance();
     if (persist) scheduleAppearanceSave();
@@ -4569,15 +4831,27 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
   $("#appearanceClose").addEventListener("click", function () { appearanceDialog.close(); });
   appearanceDialog.addEventListener("close", commitAppearance);
   $("#appearancePresets").addEventListener("click", function (event) {
-    const button = event.target.closest(".appearance-preset");
+    const remove = event.target.closest("[data-delete-theme]");
+    if (remove) {
+      event.stopPropagation();
+      deleteAppearanceTheme(remove.dataset.deleteTheme);
+      return;
+    }
+    const button = event.target.closest("[data-scheme], [data-theme-id]");
     if (!button) return;
+    if (button.dataset.themeId) {
+      applyAppearanceTheme(button.dataset.themeId);
+      return;
+    }
     const scheme = button.dataset.scheme;
-    updateAppearance({ scheme: scheme, lastDarkScheme: scheme === "papel" ? normalizeAppearance(state.appearance).lastDarkScheme : scheme, accent: "", colors: {}, activeThemeId: "" }, true);
+    const mode = schemeMode(scheme);
+    appearanceAutoMode = mode;
+    updateAppearance({ scheme: scheme, lastDarkScheme: mode === "dark" ? scheme : normalizeAppearance(state.appearance).lastDarkScheme, accent: "", colors: {}, activeThemeId: "" }, true);
   });
   $("#appearancePresets").addEventListener("keydown", function (event) {
     const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
     if (!keys.includes(event.key)) return;
-    const buttons = $$(".appearance-preset", this);
+    const buttons = $$("[data-scheme], [data-theme-id]", this);
     const currentIndex = buttons.indexOf(document.activeElement);
     if (currentIndex < 0) return;
     event.preventDefault();
@@ -4631,15 +4905,13 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
       saveAppearanceTheme();
     }
   });
-  $("#appearanceThemes").addEventListener("click", function (event) {
-    const remove = event.target.closest("[data-delete-theme]");
-    if (remove) {
-      deleteAppearanceTheme(remove.dataset.deleteTheme);
-      return;
-    }
-    const button = event.target.closest("[data-theme-id]");
-    if (button) applyAppearanceTheme(button.dataset.themeId);
+  $("#appearanceAutoModes").addEventListener("click", function (event) {
+    const button = event.target.closest("button[data-auto-mode]");
+    if (!button) return;
+    appearanceAutoMode = button.dataset.autoMode;
+    renderAppearance();
   });
+  $("#appearanceAutoPalette").addEventListener("click", applyAutoAppearancePalette);
   $("#appearanceContrast").addEventListener("input", function () { updateAppearance({ contrast: Number(this.value) }, true); });
   $("#appearanceRadius").addEventListener("input", function () { updateAppearance({ radius: Number(this.value) }, true); });
   $("#appearanceDensity").addEventListener("click", function (event) {
@@ -4647,7 +4919,8 @@ Liste as imagens usadas, as que faltaram e o que eu devo revisar.`;
     if (button) updateAppearance({ density: button.dataset.density }, true);
   });
   $("#appearanceResetAll").addEventListener("click", function () {
-    updateAppearance({ scheme: "floresta", lastDarkScheme: "floresta", accent: "", colors: {}, contrast: 50, radius: 12, density: "confortavel", activeThemeId: "" }, true);
+    appearanceAutoMode = "dark";
+    updateAppearance({ scheme: "floresta", lastDarkScheme: "floresta", accent: "", colors: {}, contrast: 50, radius: 12, density: "confortavel", activeThemeId: "", autoMode: "dark" }, true);
   });
   window.addEventListener("pagehide", commitAppearance);
   leadDialog.addEventListener("close", resetLeadDialog);

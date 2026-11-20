@@ -12,7 +12,8 @@
       try {
         var raw = localStorage.getItem("art-crm-appearance-v1");
         var app = raw ? JSON.parse(raw) : null;
-        var schemes = ["floresta", "grafite", "petroleo", "vinho", "bronze", "oliva", "papel"];
+        var schemes = ["floresta", "grafite", "petroleo", "vinho", "bronze", "oliva", "papel", "matrix-light", "matrix-medium", "matrix-dark", "vermelhao-light", "vermelhao-medium", "vermelhao-dark", "ciberpunk-light", "ciberpunk-dark", "oceano-light", "oceano-medium", "oceano-dark", "pordosol-light", "pordosol-dark", "sakura-light", "sakura-dark", "cafe-light", "cafe-dark", "nevoa-light", "nevoa-medium", "nevoa-dark"];
+        var lightSchemes = { papel: 1, "matrix-light": 1, "vermelhao-light": 1, "ciberpunk-light": 1, "oceano-light": 1, "pordosol-light": 1, "sakura-light": 1, "cafe-light": 1, "nevoa-light": 1 };
         var densities = ["compacta", "confortavel", "espacada"];
         var scheme = app && schemes.indexOf(app.scheme) >= 0 ? app.scheme : "floresta";
         if ((!app || !app.scheme) && localStorage.getItem("praca-crm-theme-v1") === "light") scheme = "papel";
@@ -30,8 +31,28 @@
           vinho: ["#130f11", "#1b1619", "#f2ecee", "#b0a3a7", "#2b2327"],
           bronze: ["#12100c", "#1a1712", "#f3eee4", "#b1a794", "#2a251c"],
           oliva: ["#10110d", "#181a14", "#eff2e7", "#a8ae99", "#282c1f"],
-          papel: ["#f4f2ec", "#ffffff", "#1e241e", "#676d63", "#eeede6"]
-        }[scheme];
+          papel: ["#f4f2ec", "#ffffff", "#1e241e", "#676d63", "#eeede6"],
+          "matrix-light": ["#f2f7f4", "#fefefe", "#1f3c2a", "#5b7c67", "#e4ede7"],
+          "matrix-medium": ["#49795b", "#59886a", "#f4f6f5", "#c8d0cb", "#689779"],
+          "matrix-dark": ["#0e1611", "#162019", "#eff1ef", "#a1b0a6", "#243329"],
+          "vermelhao-light": ["#f8f2f2", "#fefefe", "#3e1f1e", "#7d5a59", "#ede3e3"],
+          "vermelhao-medium": ["#7b4846", "#8a5856", "#f6f4f4", "#d1c8c7", "#996766"],
+          "vermelhao-dark": ["#160e0e", "#211515", "#f1efef", "#b0a1a0", "#332423"],
+          "ciberpunk-light": ["#f8f2f7", "#fefefe", "#3f1c38", "#7f5777", "#eee3eb"],
+          "ciberpunk-dark": ["#160d15", "#21141f", "#f1eef0", "#b19fae", "#342331"],
+          "oceano-light": ["#f3f7f7", "#fefefe", "#213b39", "#5c7a78", "#e4ecec"],
+          "oceano-medium": ["#4c7673", "#5b8582", "#f4f6f5", "#c8d0cf", "#6b9491"],
+          "oceano-dark": ["#0f1515", "#161f1f", "#eff1f1", "#a2afae", "#253231"],
+          "pordosol-light": ["#f8f4f2", "#fefefe", "#3f2b1d", "#7e6758", "#ede7e3"],
+          "pordosol-dark": ["#16110d", "#211a15", "#f1efee", "#b1a7a0", "#342a23"],
+          "sakura-light": ["#f7f2f4", "#fefefe", "#3d1f2c", "#7c5a69", "#ede3e7"],
+          "sakura-dark": ["#160e11", "#20151a", "#f1eff0", "#b0a1a7", "#33242a"],
+          "cafe-light": ["#f7f5f3", "#fefefe", "#382e24", "#766b60", "#ebe8e5"],
+          "cafe-dark": ["#14120f", "#1e1b17", "#f0f0ef", "#ada8a3", "#302b26"],
+          "nevoa-light": ["#f4f5f6", "#fefefe", "#292e33", "#656b71", "#e6e8ea"],
+          "nevoa-medium": ["#58616a", "#677079", "#f4f5f5", "#caccce", "#778088"],
+          "nevoa-dark": ["#101213", "#191b1d", "#eff0f0", "#a6a8ab", "#292b2e"]
+        }[scheme] || ["#0c1210", "#151c18", "#edf3ee", "#a1aea4", "#202b24"];
         function rgb(value) {
           var number = parseInt(value.slice(1), 16);
           return [number >> 16 & 255, number >> 8 & 255, number & 255];
@@ -51,11 +72,13 @@
           return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
         }
         var root = document.documentElement;
+        var mode = lightSchemes[scheme] ? "light" : scheme.indexOf("-medium") > 0 ? "medium" : "dark";
         root.dataset.scheme = scheme;
-        root.dataset.theme = scheme === "papel" ? "light" : "dark";
+        root.dataset.mode = mode;
+        root.dataset.theme = mode === "light" ? "light" : "dark";
         root.dataset.density = density;
         root.style.setProperty("--radius-user", radius + "px");
-        var light = scheme === "papel";
+        var light = mode === "light";
         var colorTokens = ["canvas", "paper", "sidebar-bg", "topbar-bg", "surface-2", "surface-3", "control-bg", "hover-bg", "ink", "muted", "control-ink", "nav-ink", "line", "control-border", "row-line", "green", "green-dark", "green-soft", "focus", "orange", "orange-soft", "red"];
         var colorSource = app && app.colors && typeof app.colors === "object" ? app.colors : {};
         var overrides = {};
@@ -106,9 +129,9 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=37">
+  <link rel="stylesheet" href="styles.css?v=38">
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=37" defer></script>
+  <script src="app.js?v=38" defer></script>
 </head>
 <body>
   <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -568,15 +591,7 @@
       <div class="appearance-body">
         <section class="appearance-group">
           <div class="appearance-group-head"><h3>Tema</h3><p>Escolha o conjunto de cores de fundo, papel e destaque.</p></div>
-          <div class="appearance-presets" id="appearancePresets" role="radiogroup" aria-label="Tema">
-            <button class="appearance-preset is-active" type="button" role="radio" aria-checked="true" data-scheme="floresta" tabindex="0"><span class="preset-swatches" aria-hidden="true"><i style="background:#0c1210"></i><i style="background:#151c18"></i><i style="background:#7fbf97"></i></span><span class="preset-name">Floresta</span></button>
-            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="grafite" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#121110"></i><i style="background:#1a1917"></i><i style="background:#c9bfaf"></i></span><span class="preset-name">Grafite</span></button>
-            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="petroleo" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#0c1214"></i><i style="background:#131b1e"></i><i style="background:#7fb6c2"></i></span><span class="preset-name">Petróleo</span></button>
-            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="vinho" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#130f11"></i><i style="background:#1b1619"></i><i style="background:#ce8b8b"></i></span><span class="preset-name">Vinho</span></button>
-            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="bronze" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#12100c"></i><i style="background:#1a1712"></i><i style="background:#d0a566"></i></span><span class="preset-name">Bronze</span></button>
-            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="oliva" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#10110d"></i><i style="background:#181a14"></i><i style="background:#b3c17c"></i></span><span class="preset-name">Oliva</span></button>
-            <button class="appearance-preset" type="button" role="radio" aria-checked="false" data-scheme="papel" tabindex="-1"><span class="preset-swatches" aria-hidden="true"><i style="background:#f4f2ec"></i><i style="background:#ffffff"></i><i style="background:#356b4d"></i></span><span class="preset-name">Papel</span></button>
-          </div>
+          <div class="appearance-presets" id="appearancePresets" role="group" aria-label="Tema"></div>
         </section>
         <section class="appearance-group">
           <div class="appearance-group-head"><h3>Destaque</h3><p>O destaque marca ação, seleção e sucesso.</p></div>
@@ -589,20 +604,27 @@
         </section>
         <section class="appearance-group">
           <div class="appearance-group-head"><h3>Cores do tema</h3><p>Ajuste fundo, textos e linhas. O que você não mudar continua vindo do tema escolhido.</p></div>
+          <div class="appearance-auto">
+            <p class="appearance-auto-copy">Quer uma paleta inteira a partir da cor de destaque? Escolha o modo e ajuste tudo de uma vez.</p>
+            <div class="appearance-auto-modes" id="appearanceAutoModes" role="group" aria-label="Modo da paleta automática">
+              <button type="button" class="appearance-auto-mode" data-auto-mode="light" aria-pressed="false">Claro</button>
+              <button type="button" class="appearance-auto-mode" data-auto-mode="medium" aria-pressed="false">Médio</button>
+              <button type="button" class="appearance-auto-mode" data-auto-mode="dark" aria-pressed="false">Escuro</button>
+            </div>
+            <button class="button button-secondary appearance-auto-button" id="appearanceAutoPalette" type="button">Ajustar a partir do destaque</button>
+          </div>
           <div class="appearance-color-list" id="appearancePrimaryColors"></div>
           <p class="appearance-contrast-warning" id="appearanceContrastWarning" role="status" hidden></p>
           <button class="text-button appearance-advanced-toggle" id="appearanceAdvancedToggle" type="button" aria-expanded="false" aria-controls="appearanceAdvancedColors">Mostrar todas as cores</button>
           <div class="appearance-advanced" id="appearanceAdvancedColors" hidden></div>
         </section>
         <section class="appearance-group">
-          <div class="appearance-group-head"><h3>Meus temas</h3><p>Salve a combinação atual e volte a ela quando quiser.</p></div>
+          <div class="appearance-group-head"><h3>Meus temas</h3><p>Salve a combinação atual. Seus temas aparecem na grade acima, junto dos prontos.</p></div>
           <p class="appearance-editing" id="appearanceEditingTheme" hidden></p>
           <div class="appearance-save-theme">
             <input id="appearanceThemeName" type="text" maxlength="40" placeholder="Nome do tema" aria-label="Nome do novo tema">
             <button class="button button-secondary" id="appearanceThemeSave" type="button">Salvar tema</button>
           </div>
-          <div class="appearance-themes" id="appearanceThemes"></div>
-          <p class="appearance-empty" id="appearanceThemesEmpty">Nenhum tema salvo ainda.</p>
         </section>
         <section class="appearance-group">
           <div class="appearance-range-head"><h3>Contraste do texto</h3><output id="appearanceContrastValue" for="appearanceContrast">50</output></div>
